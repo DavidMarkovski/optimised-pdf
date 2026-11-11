@@ -3,15 +3,7 @@
 name: FreeBSD
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - "**/Cargo.toml"
-      - .github/workflows/freebsd.yml
-      - packaging/freebsd/**
+  # Optimised PDF: run by hand only (Actions > Run workflow), to save private-repo minutes.
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +16,6 @@ permissions:
 jobs:
   freebsd:
     # Intentionally tracked at @main (not SHA-pinned) so org-wide CI improvements, security fixes, and build optimizations propagate without PR churn across all craftapp repos.
-    uses: storytold/craft-common-actions/.github/workflows/freebsd.yml@main
+    uses: storytold/craft-common-actions/.github/workflows/freebsd.yml@840a417e3de8198bdd99a87c8cafd5993a92c76f
     with:
       craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83

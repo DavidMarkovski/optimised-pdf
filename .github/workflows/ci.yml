@@ -3,11 +3,9 @@ name: CI
 # Quality gates for every push to main and every pull request (`cargo xtask ci`), through the
 # suite's shared gate workflow in craft-common-actions. Nightly fuzzing is in fuzz.yml.
 on:
-  push:
-    branches: [main]
+  # Optimised PDF: pull requests and manual runs only. A PR's run already tests its merge
+  # with main, so pushes to main don't run it again.
   pull_request:
-    # `labeled` so that adding `full-ci` to an open PR starts a run with Windows in it.
-    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 # The token is only used to check out the code: no job writes to the repository.
@@ -23,7 +21,6 @@ concurrency:
 jobs:
   # The shared gate doesn't check where git dependencies come from; release.yml runs the same job.
   git-sources:
-    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     name: Git dependencies come from storytold
     runs-on: ubuntu-latest
     permissions:
@@ -68,13 +65,11 @@ jobs:
           PY
 
   gate:
-    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     # Tracks @main so suite-wide CI fixes reach every app without a PR in each repository.
-    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@840a417e3de8198bdd99a87c8cafd5993a92c76f
     with:
-      # Windows on main, manual runs and pull requests labelled `full-ci`. No macOS on PRs or main:
-      # the org's 5 macOS slots are kept for release builds, and release.yml builds macOS.
-      os: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')) && '["ubuntu-24.04","windows-latest"]' || '["ubuntu-24.04"]' }}
+      # Optimised PDF ships for Windows only, and the Linux runner ran out of disk.
+      os: '["windows-latest"]'
       # Same craft-fonts commit as release.yml and freebsd.yml.
       craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
       # egui/winit/rfd, and the independent oracles (crates/oracle).

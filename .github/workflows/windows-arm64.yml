@@ -4,18 +4,7 @@
 name: Windows ARM64
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - "**/Cargo.toml"
-      - "**/build.rs"
-      - .github/workflows/windows-arm64.yml
-      - packaging/windows/**
-  schedule:
-    - cron: "41 4 * * 1" # weekly, so drift in the runner images shows up
+  # Optimised PDF: run by hand only (Actions > Run workflow), to save private-repo minutes.
   workflow_dispatch:
 
 concurrency:
@@ -28,7 +17,7 @@ permissions:
 jobs:
   windows-arm64:
     # Intentionally tracked at @main (not SHA-pinned) so org-wide CI improvements, security fixes, and build optimizations propagate without PR churn across all craftapp repos.
-    uses: storytold/craft-common-actions/.github/workflows/windows-arm64.yml@main
+    uses: storytold/craft-common-actions/.github/workflows/windows-arm64.yml@840a417e3de8198bdd99a87c8cafd5993a92c76f
     with:
       app-name: pdfcraft
       app-dir: PdfCraft
