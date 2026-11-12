@@ -1,0 +1,119 @@
+name: Build installer
+
+# Optimised PDF for Windows x64: the MSI, a portable zip, and the MSI wrapped for Microsoft Intune
+# (.intunewin), with the Intune setup notes. Started by hand (Actions > Build installer > Run
+# workflow); the files are attached to the run as one artifact. Unsigned: packaging/windows/sign.ps1
+# warns and leaves the files unsigned when no signing secrets are set.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Microsoft Win32 Content Prep Tool, pinned by release tag and SHA-256 (Authenticode-signed by
+  # Microsoft Corporation; checked when the pin was set).
+  INTUNE_TOOL_URL: https://raw.githubusercontent.com/microsoft/Microsoft-Win32-Content-Prep-Tool/v1.8.7/IntuneWinAppUtil.exe
+  INTUNE_TOOL_SHA256: c1ba45b5cb939e84af064bb7ff4b38fb3dfe33c8dc1078fd9b157672eae671f6
+
+jobs:
+  windows-x64:
+    name: installer (windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: installer-x64
+
+      - name: Install WiX v5
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed.' }
+          $policy = Get-Content -Raw -LiteralPath packaging/windows/install-policy.json | ConvertFrom-Json
+          foreach ($extension in @($policy.extensions)) {
+            wix extension add -g "WixToolset.$extension.wixext/5.0.2"
+            if ($LASTEXITCODE -ne 0) { throw "WiX extension $extension installation failed." }
+          }
+          wix --version
+
+      # Builds OptimisedPDF.exe and pdfcraft-cli.exe, fetches the OCR models, builds the MSI and
+      # checks it (test-msi.ps1, check-install-policy.ps1), and zips the portable copy.
+      - name: Build the MSI and the portable zip
+        shell: pwsh
+        env:
+          DIST: ${{ github.workspace }}\dist\release
+        run: pwsh packaging/windows/package.ps1 -Arch x64
+
+      - name: Name the files for Optimised PDF and wrap the MSI for Intune
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist\release'
+          $msi = Get-ChildItem $dist -Filter 'pdfcraft-*-windows-x64.msi' | Select-Object -First 1
+          $zip = Get-ChildItem $dist -Filter 'pdfcraft-*-windows-x64-portable.zip' | Select-Object -First 1
+          if (-not $msi -or -not $zip) { throw "package.ps1 did not produce the MSI and the portable zip in $dist" }
+          $version = $msi.Name -replace '^pdfcraft-(.+)-windows-x64\.msi$', '$1'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'out'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $msiName = "OptimisedPDF-$version-x64.msi"
+          Copy-Item $msi.FullName (Join-Path $out $msiName)
+          Copy-Item $zip.FullName (Join-Path $out "OptimisedPDF-$version-x64-portable.zip")
+
+          # Intune Win32 app: the content folder holds just the MSI, so Intune reads its product
+          # code and version and fills in the uninstall and detection settings.
+          $tool = Join-Path $env:RUNNER_TEMP 'IntuneWinAppUtil.exe'
+          Invoke-WebRequest -Uri $env:INTUNE_TOOL_URL -OutFile $tool
+          $hash = (Get-FileHash $tool -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:INTUNE_TOOL_SHA256) { throw "IntuneWinAppUtil.exe SHA-256 $hash does not match the pin" }
+          $content = Join-Path $env:RUNNER_TEMP 'intune-content'
+          New-Item -ItemType Directory -Force -Path $content | Out-Null
+          Copy-Item (Join-Path $out $msiName) $content
+          & $tool -c $content -s $msiName -o $out -q
+          if ($LASTEXITCODE -ne 0) { throw "IntuneWinAppUtil failed with exit code $LASTEXITCODE" }
+          $wrapped = Join-Path $out ([IO.Path]::ChangeExtension($msiName, '.intunewin'))
+          if (-not (Test-Path $wrapped)) { throw "no .intunewin produced" }
+
+          # The MSI's product code, for the uninstall command and detection rule in the notes.
+          # (Direct COM calls, as packaging/windows/test-msi.ps1 does; InvokeMember fails in pwsh.)
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $db = $installer.OpenDatabase((Join-Path $out $msiName), 0)
+          $view = $db.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'ProductCode'")
+          [void] $view.Execute()
+          $productCode = $view.Fetch().StringData(1)
+          [void] $view.Close()
+          [void] [System.Runtime.InteropServices.Marshal]::ReleaseComObject($view)
+          [void] [System.Runtime.InteropServices.Marshal]::ReleaseComObject($db)
+          if ($productCode -notmatch '^\{[0-9A-F-]{36}\}$') { throw "unexpected ProductCode '$productCode'" }
+          Write-Output "ProductCode $productCode"
+
+          $notes = Get-Content packaging/windows/intune/README.md -Raw
+          $notes = $notes.Replace('{{VERSION}}', $version).Replace('{{MSI}}', $msiName).Replace('{{PRODUCT_CODE}}', $productCode)
+          Set-Content -Path (Join-Path $out 'INTUNE-SETUP.md') -Value $notes -Encoding utf8
+          Copy-Item packaging/windows/intune/DefaultAssociations.xml $out
+
+          Push-Location $out
+          Get-ChildItem -File | Where-Object Name -ne 'SHA256SUMS.txt' | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content -Path 'SHA256SUMS.txt' -Encoding ascii
+          Pop-Location
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: optimised-pdf-windows-x64
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
