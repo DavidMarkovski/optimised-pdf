@@ -178,6 +178,7 @@ impl PdfCraftApp {
             pinned: Default::default(),
             recent_check: Default::default(),
             pinned_tools: Vec::new(),
+            toolbar_tools: Vec::new(),
             pin_tool_search: String::new(),
             toast: None,
             toast_script: None,

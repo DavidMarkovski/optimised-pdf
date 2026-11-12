@@ -175,6 +175,7 @@ impl PdfCraftApp {
         v["fill_text_color"] = serde_json::json!(self.fill_text_color);
         v["redact_prefs"] = self.redact_defaults.to_json();
         v["pinned_tools"] = serde_json::json!(self.pinned_tools);
+        v["toolbar_tools"] = serde_json::json!(self.toolbar_tools);
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
         // The Print dialog's own paper sizes (print.page-setup).
@@ -281,6 +282,12 @@ impl PdfCraftApp {
                 }
             }
             self.pinned_tools = tools;
+        }
+        // Optimised PDF: the toolbar's pinned tools, in order; unknown or repeated ids dropped.
+        if let Some(items) = v.get("toolbar_tools").and_then(serde_json::Value::as_array) {
+            let mut tools: Vec<String> = items.iter().filter_map(serde_json::Value::as_str).map(String::from).collect();
+            crate::toolbar::normalize(&mut tools);
+            self.toolbar_tools = tools;
         }
         if let Ok(preference) = serde_json::from_value::<ThemePreference>(v["theme"].clone()) {
             self.set_theme_preference(preference);

@@ -33,6 +33,15 @@ impl Selection {
         }
     }
 
+    /// Optimised PDF: the boxes a redaction of the selection draws, one per visual row where that
+    /// covers nothing unselected ([`PageText::redaction_rects`]).
+    pub(super) fn redaction_rects(&self, text: &PageText) -> Vec<[f32; 4]> {
+        match self.span {
+            Span::Run { anchor, head } => text.redaction_rects(&Self::range(anchor, head).collect::<Vec<_>>()),
+            Span::Column { rect } => text.redaction_rects(&text.glyphs_in(rect)),
+        }
+    }
+
     /// The selected text, as Copy puts it on the clipboard.
     pub(super) fn text(&self, text: &PageText) -> String {
         match self.span {
@@ -59,6 +68,16 @@ impl DocView {
         let text = self.texts.get(&s.page)?;
         let page = info.pages.get(s.page)?;
         let quads: Vec<[f64; 8]> = s.rects(text).into_iter().map(|r| page.view_rect_to_quad(r)).collect();
+        (!quads.is_empty()).then_some((s.page, quads))
+    }
+
+    /// [`Self::selection_quads`] for Mark for Redaction: one box per visual row where safe, so the
+    /// marks don't show how long each hidden word is (Optimised PDF).
+    pub(crate) fn selection_redaction_quads(&self, info: &DocInfo) -> Option<(usize, Vec<[f64; 8]>)> {
+        let s = self.selection?;
+        let text = self.texts.get(&s.page)?;
+        let page = info.pages.get(s.page)?;
+        let quads: Vec<[f64; 8]> = s.redaction_rects(text).into_iter().map(|r| page.view_rect_to_quad(r)).collect();
         (!quads.is_empty()).then_some((s.page, quads))
     }
 

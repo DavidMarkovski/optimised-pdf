@@ -55,6 +55,7 @@ mod home;
 mod hotbar;
 mod panels;
 pub mod panes;
+pub mod toolbar;
 pub use print_ui::{
     DefaultPaperSource, Handling as PrintHandling, LaunchPrint, OptionsSource, PrintDraft, PrinterPapersSource, PrinterSetup, PrinterSource, Spooler,
     TwoSidedSource, Which as PrintWhich, system_printers, system_two_sided,
@@ -511,6 +512,8 @@ pub struct PdfCraftApp {
     recent_check: persist::recent_check::RecentCheck,
     /// Tools pinned to Home, in user-defined order.
     pub pinned_tools: Vec<String>,
+    /// Optimised PDF: the command ids pinned to the toolbar, in the order shown (`toolbar`).
+    pub toolbar_tools: Vec<String>,
     /// Search query for the Pin a tool selection dialog.
     pub pin_tool_search: String,
     pub toast: Option<(String, f64)>,

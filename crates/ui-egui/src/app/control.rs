@@ -27,6 +27,8 @@ impl PdfCraftApp {
                 self.hotbar.full_side = value.parse().map_err(|_| "hotbar-full-side must be true or false")?;
             }
             ("hotbar-tools", _) => self.hotbar.set_tools(value)?,
+            // Optimised PDF: the tools pinned to the toolbar, in order (`crate::toolbar`).
+            ("toolbar-tools", _) => self.set_toolbar_tools(value)?,
             ("hotbar-side", _) => self.hotbar.place(value)?,
             ("language", _) => {
                 let language = i18n::normalize_pref(value).ok_or_else(|| {
