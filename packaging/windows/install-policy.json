@@ -1,6 +1,7 @@
 {
   "id": "pdfcraft",
   "name": "Optimised PDF",
+  "suiteFolder": "Optimised Accounting",
   "upgradeCode": "04852A13-1E39-49E2-810A-BF7DA08EE928",
   "sources": [
     "pdfcraft.wxs",
