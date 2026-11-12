@@ -110,7 +110,7 @@
         <RegistryValue Root="HKMU" Key="Software\Classes\OptimisedPDF.Document\DefaultIcon" Value="&quot;[#PdfcraftExe]&quot;,-2" Type="string" />
         <RegistryValue Root="HKMU" Key="Software\Classes\OptimisedPDF.Document\shell\open\command" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" Type="string" />
         <!-- Optimised PDF: File Explorer's Print (and printto, a file dropped on a printer) open the
-             file, show the Print dialog and close when it is done (`--print`, apps/pdfcraft). There
+             file, show the Print dialog and close when it is done (the print option, apps/pdfcraft). There
              is no quick print: the dialog always shows. -->
         <RegistryValue Root="HKMU" Key="Software\Classes\OptimisedPDF.Document\shell\print\command" Value="&quot;[#PdfcraftExe]&quot; --print &quot;%1&quot;" Type="string" />
         <RegistryValue Root="HKMU" Key="Software\Classes\OptimisedPDF.Document\shell\printto\command" Value="&quot;[#PdfcraftExe]&quot; --print &quot;%1&quot;" Type="string" />
