@@ -659,8 +659,6 @@ fn card_general(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mut 
     ctx.checkbox(ui, &mut app.restore_last_view, tl!("Restore the last view (page, zoom and page display) when a document is opened again"), t);
     #[cfg(not(target_arch = "wasm32"))]
     ctx.checkbox(ui, &mut app.reload_changed_files, tl!("Reload documents when their files change on disk"), t);
-    #[cfg(not(target_arch = "wasm32"))]
-    ctx.checkbox(ui, &mut app.update_check_at_start, tl!("Check for updates when Optimised PDF starts"), t);
     ctx.checkbox(ui, &mut app.show_secured_notice, tl!("Show a notice when a document is secured"), t);
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -824,8 +822,7 @@ fn card_documents_and_view(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens,
         let defaults = app.view_defaults;
         apply_view_pref_changes(&mut app.views[i], &defaults, ViewPrefChanges { always_reset: false, ..changes });
     }
-    ctx.checkbox(ui, &mut app.text_links, tl!("Open web and email addresses written in the page text"), t);
-    ctx.label_secondary(ui, tl!("Only web (http, https) and email addresses open, and Optimised PDF asks first, as for other links."), t);
+    // Optimised PDF: no option to make addresses in page text clickable (offline app).
     ui.add_space(6.0);
 
     ui.horizontal(|ui| {

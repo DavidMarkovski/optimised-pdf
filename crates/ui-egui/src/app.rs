@@ -129,7 +129,6 @@ impl PdfCraftApp {
             fill_text_border_shape: pdfcraft_engine::BorderShape::Rectangle,
             fill_text_default: fill_sign::TextBorder::NONE,
             dialog: None,
-            updates: updates::Updates::default(),
             printer_source: None,
             options_source: None,
             default_paper_source: None,
@@ -137,6 +136,7 @@ impl PdfCraftApp {
             spooler: None,
             two_sided_source: None,
             print_tasks: print_ui::PrintTasks::default(),
+            launch_print: print_ui::LaunchPrint::Off,
             palette_open: false,
             palette_query: String::new(),
             all_tools_expanded: false,
@@ -151,9 +151,9 @@ impl PdfCraftApp {
             last_session: Default::default(),
             quit_session: None,
             reload_changed_files: true,
-            update_check_at_start: true,
             show_secured_notice: true,
-            text_links: true,
+            // Optimised PDF: addresses written as page text are not links (offline app).
+            text_links: false,
             always_default_view: false,
             #[cfg(not(target_arch = "wasm32"))]
             watch: Default::default(),
@@ -439,7 +439,7 @@ impl PdfCraftApp {
         // Full screen draws the page alone: not the palette, nor the OCR Verify screen it was
         // entered over. Dialogs and prompts show there too.
         let shown = !(self.full_screen && self.active.is_some());
-        self.modal_open() || self.pending_full_screen.is_some() || self.updates.prompt_open() || (self.palette_open || self.ocr_verify.open) && shown
+        self.modal_open() || self.pending_full_screen.is_some() || (self.palette_open || self.ocr_verify.open) && shown
     }
 
     /// A dialog or prompt is open over the window: the keyboard is its own, and nothing may act
@@ -455,7 +455,6 @@ impl PdfCraftApp {
             || self.unlock_prompt.is_some()
             || self.pending_link.is_some()
             || self.pending_remote_link.is_some()
-            || self.updates.open
     }
 
     /// Show `msg` in the toast now, in place of whatever it showed. Script messages still waiting
@@ -558,11 +557,6 @@ impl eframe::App for PdfCraftApp {
             self.window_state.keep(storage, minimized);
         }
         storage.set_string("pdfcraft", self.persist());
-    }
-
-    /// Starts an update that waits for the exit. On macOS the process ends before the app is dropped.
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.updates.exiting();
     }
 
     /// Each frame's work before drawing: opens, operating-system and control-channel requests,
@@ -741,8 +735,8 @@ impl PdfCraftApp {
                 report(dirty);
             }
         }
-        self.poll_updates();
         self.poll_print();
+        self.poll_launch_print();
         // Shortcuts deferred last frame: the text field has taken that frame's typing since.
         let deferred = std::mem::take(&mut self.deferred_commands);
         self.native_menu_clicks(ctx);

@@ -9,14 +9,9 @@
 // The settings object in `persist` is one `json!` literal past the default limit of 128.
 #![recursion_limit = "256"]
 
-/// PdfCraft as craft-update knows it, with its 128 px icon and accent colour: the update
-/// prompt shows both, and an AppImage's menu entry gets the icon.
-#[cfg(not(target_arch = "wasm32"))]
-pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
-    icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.pdfcraft.png")),
-    accent: Some([0xb7, 0x02, 0x28]),
-    ..craft_update::suite::PDFCRAFT
-};
+/// The name of the per-user folders (settings, logs, recovery, the single-instance socket) and
+/// the window's app name. Optimised PDF keeps its own, apart from any PdfCraft installation.
+pub const STORAGE_NAME: &str = "OptimisedPDF";
 
 use crate::control::Host as _;
 
@@ -61,7 +56,7 @@ mod hotbar;
 mod panels;
 pub mod panes;
 pub use print_ui::{
-    DefaultPaperSource, Handling as PrintHandling, OptionsSource, PrintDraft, PrinterPapersSource, PrinterSetup, PrinterSource, Spooler,
+    DefaultPaperSource, Handling as PrintHandling, LaunchPrint, OptionsSource, PrintDraft, PrinterPapersSource, PrinterSetup, PrinterSource, Spooler,
     TwoSidedSource, Which as PrintWhich, system_printers, system_two_sided,
 };
 pub use redact_ui::{HiddenDraft, PagesDraft as RedactPagesDraft, RedactPrefs, SearchDraft as RedactSearchDraft, SearchMode as RedactSearchMode};
@@ -162,7 +157,6 @@ pub use platform::portable;
 #[cfg(not(target_arch = "wasm32"))]
 use platform::system_fonts;
 pub use platform::ui_scale;
-pub use platform::updates;
 pub use platform::window_controls;
 #[cfg(test)]
 use state::CopyPage;
@@ -431,8 +425,6 @@ pub struct PdfCraftApp {
     /// Current Properties Default last took from typed text (none at first).
     pub fill_text_default: fill_sign::TextBorder,
     pub dialog: Option<Dialog>,
-    /// How to ask for the latest release (the desktop app sets it; see `updates`).
-    pub(crate) updates: updates::Updates,
     /// Lists the Print dialog's printers in the background (the desktop app sets it; see
     /// [`PrinterSource`]).
     pub printer_source: Option<PrinterSource>,
@@ -450,6 +442,8 @@ pub struct PdfCraftApp {
     // A browser has no background print work: the type is empty there.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) print_tasks: print_ui::PrintTasks,
+    /// Optimised PDF: a print-only launch's progress ([`PdfCraftApp::print_then_quit`]).
+    launch_print: print_ui::LaunchPrint,
     pub palette_open: bool,
     pub palette_query: String,
     pub all_tools_expanded: bool,
@@ -476,9 +470,6 @@ pub struct PdfCraftApp {
     quit_session: Option<last_session::LastSession>,
     /// Preferences: reload a document when its file changes on disk (#431).
     pub reload_changed_files: bool,
-    /// Preferences: ask for a newer release when the desktop app starts (#5737). Off, the app
-    /// asks only from Help ▸ Check for updates.
-    pub update_check_at_start: bool,
     /// Preferences: tell the user, above the pages, that a document is secured (its security
     /// settings restrict changes). Off only hides that notice (#4035); kept in the settings.
     pub show_secured_notice: bool,

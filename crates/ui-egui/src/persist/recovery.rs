@@ -169,7 +169,7 @@ impl RecoveryStore {
 
     /// `Recovery` in the portable data folder in portable mode ([`crate::portable`]), otherwise
     /// the platform's per-user data folder: `~/Library/Application Support/PdfCraft/Recovery`
-    /// (macOS), `%LOCALAPPDATA%\PdfCraft\Recovery` (Windows), or
+    /// (macOS), `%LOCALAPPDATA%\OptimisedPDF\Recovery` (Windows), or
     /// `$XDG_DATA_HOME/pdfcraft/recovery` / `~/.local/share/pdfcraft/recovery` (others).
     pub fn default_dir() -> Option<PathBuf> {
         if let Some(dir) = crate::portable::data_dir() {
@@ -179,7 +179,7 @@ impl RecoveryStore {
         if cfg!(target_os = "macos") {
             env("HOME").map(|h| h.join("Library/Application Support/PdfCraft/Recovery"))
         } else if cfg!(windows) {
-            env("LOCALAPPDATA").map(|d| d.join("PdfCraft").join("Recovery"))
+            env("LOCALAPPDATA").map(|d| d.join(crate::STORAGE_NAME).join("Recovery"))
         } else {
             env("XDG_DATA_HOME").or_else(|| env("HOME").map(|h| h.join(".local/share"))).map(|d| d.join("pdfcraft/recovery"))
         }
@@ -202,7 +202,7 @@ pub fn default_dictionary_dir() -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
         env("HOME").map(|h| h.join("Library/Application Support/PdfCraft/Dictionary"))
     } else if cfg!(windows) {
-        env("LOCALAPPDATA").map(|d| d.join("PdfCraft").join("Dictionary"))
+        env("LOCALAPPDATA").map(|d| d.join(crate::STORAGE_NAME).join("Dictionary"))
     } else {
         env("XDG_DATA_HOME").or_else(|| env("HOME").map(|h| h.join(".local/share"))).map(|d| d.join("pdfcraft/dictionary"))
     }

@@ -8,9 +8,12 @@ license.workspace = true
 [lints]
 workspace = true
 
+# Optimised PDF: the desktop app ships as OptimisedPDF.exe; the package keeps its crate name.
+[[bin]]
+name = "OptimisedPDF"
+path = "src/main.rs"
+
 [dependencies]
-# Help ▸ Check for updates (issue #28): one HTTPS request to GitHub, over rustls with the OS's
-# trusted roots. No bundled root list (webpki-roots and webpki-root-certs are CDLA-licensed).
 pdfcraft-ui-egui = { workspace = true }
 # `build_info`: the version and compile-time build label for `--version` and the log.
 pdfcraft-engine = { workspace = true }
@@ -72,6 +75,3 @@ winit = { version = "0.30", default-features = false }
 [build-dependencies]
 # Icon + VERSIONINFO for pdfcraft.exe; build.rs only uses it when targeting Windows.
 winresource = "0.1"
-
-[target.'cfg(windows)'.dependencies]
-craft-update = { workspace = true }

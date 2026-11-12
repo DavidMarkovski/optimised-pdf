@@ -1015,6 +1015,8 @@ fn addresses_written_in_the_page_text_open_like_links() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
+        // Optimised PDF: off by default; these tests turn it on.
+        app.set_option("text-links", "true").unwrap();
         app.open_bytes("text-links.pdf", None, text_links_fixture()).unwrap();
         app.set_option("left", "closed").unwrap();
         app.set_option("panel", "none").unwrap();
@@ -1047,6 +1049,12 @@ fn addresses_written_in_the_page_text_open_like_links() {
     assert_eq!(h.state().pending_link, pending(LINK_URL, LinkOrigin::Link), "a link annotation is unaffected");
 }
 
+/// Optimised PDF: addresses written in the page text are not links unless turned on (offline app).
+#[test]
+fn addresses_in_the_page_text_are_not_links_by_default() {
+    assert!(!PdfCraftApp::new().text_links);
+}
+
 /// A drag that starts on an address written as page text selects its text, as from any other
 /// text; only a click opens it (#4207, review).
 #[test]
@@ -1055,6 +1063,8 @@ fn a_drag_from_an_address_in_the_page_text_selects_it() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
+        // Optimised PDF: off by default; these tests turn it on.
+        app.set_option("text-links", "true").unwrap();
         app.open_bytes("text-links.pdf", None, text_links_fixture()).unwrap();
         app.set_option("left", "closed").unwrap();
         app.set_option("panel", "none").unwrap();
