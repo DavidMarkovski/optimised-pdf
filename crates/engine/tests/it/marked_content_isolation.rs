@@ -85,7 +85,8 @@ fn add_and_save(input: Arc<Vec<u8>>, kind: &str) -> Arc<Vec<u8>> {
     let id = session.open("fixture.pdf", None, input.clone(), None).unwrap();
     session.apply(id, edit(kind)).unwrap();
     let saved = session.save_bytes(id).unwrap();
-    assert!(saved.starts_with(&input), "incremental save preserves the original file bytes");
+    // Optimised PDF: Save is a full rewrite, never an update appended to the original bytes.
+    assert!(!saved.starts_with(&input), "a full rewrite");
     assert_original_streams(&input, &saved);
     let mut reopened = Session::new();
     let id = reopened.open("saved.pdf", None, saved.clone(), None).unwrap();
@@ -136,10 +137,14 @@ fn stream_list(doc: &Document) -> Vec<Object> {
 fn assert_original_streams(before: &Arc<Vec<u8>>, after: &Arc<Vec<u8>>) {
     let original = Document::open(before.clone()).unwrap();
     let saved = Document::open(after.clone()).unwrap();
-    let saved_list = stream_list(&saved);
+    // A full rewrite renumbers objects (Optimised PDF): compare what the streams hold.
+    let decoded = |doc: &Document, reference: &Object| match &*doc.resolve(reference) {
+        Object::Stream(s) => s.decoded().unwrap().to_vec(),
+        other => panic!("not a stream: {other:?}"),
+    };
+    let saved_list: Vec<Vec<u8>> = stream_list(&saved).iter().map(|r| decoded(&saved, r)).collect();
     for reference in stream_list(&original) {
-        assert!(saved_list.contains(&reference), "the original stream stays on the page");
-        assert_eq!(original.resolve(&reference), saved.resolve(&reference), "original encoded stream object remains unchanged");
+        assert!(saved_list.contains(&decoded(&original, &reference)), "the original stream stays on the page, unchanged");
     }
 }
 
@@ -199,7 +204,9 @@ fn replacing_and_removing_marks_restores_the_original_stream_list() {
         session.apply(id, Edit::RemoveMarks { kind: mark_kind }).unwrap();
         let saved = session.save_bytes(id).unwrap();
         let page = Document::open(saved.clone()).unwrap();
-        assert_eq!(stream_list(&page), stream_list(&original), "{kind}: removal restores original references");
+        // A full rewrite renumbers objects (Optimised PDF): the same number of streams, each the
+        // original's content (checked next).
+        assert_eq!(stream_list(&page).len(), stream_list(&original).len(), "{kind}: removal restores the original streams");
         assert_original_streams(&input, &saved);
         assert!(render(saved) == render(input.clone()), "{kind}: removal restores original pixels and text");
         session.undo(id).unwrap();

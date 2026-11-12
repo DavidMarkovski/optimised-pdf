@@ -184,7 +184,8 @@ fn page_list(s: &str) -> Result<Vec<usize>, String> {
 /// The options `edit` understands, for its "unknown option" message.
 const EDIT_OPTIONS: &str = "--out, --password, --full, --rotate, --delete, --move, --insert-blank, --title, --author";
 
-/// Apply page and metadata edits through the engine and save (incrementally unless `--full`).
+/// Apply page and metadata edits through the engine and save: a full rewrite of a changed,
+/// unsigned document (Optimised PDF); `--full` rewrites even an unchanged one.
 ///
 /// Every argument is parsed before the file is opened: an option this command does not know
 /// (a typo like `--rotat`) is an error, not something to skip — skipping it would write an

@@ -186,6 +186,10 @@ pub fn write_atomically_with(
             keep_created(&file, created);
             sync_staged(&file, sync_all)?;
         }
+        // Optimised PDF: the target is replaced only by exactly `bytes`, read back from disk.
+        if std::fs::read(&tmp)? != bytes {
+            return Err(std::io::Error::other("the file written differs from what was saved"));
+        }
         let rename_result = std::fs::rename(&tmp, path);
         #[cfg(windows)]
         if rename_result.is_ok()

@@ -882,27 +882,28 @@ fn failed_edit_changes_nothing() {
 }
 
 #[test]
-fn save_is_incremental_stamps_mod_date_and_rebases() {
+fn save_is_a_full_rewrite_stamps_mod_date_and_rebases() {
     let (mut s, id) = session_with(2);
     let original = s.get(id).unwrap().bytes.clone();
     s.apply(id, Edit::SetInfo { key: "Title".into(), value: "Quarterly report".into() }).unwrap();
     let saved = s.save_bytes(id).unwrap();
-    assert_eq!(&saved[..original.len()], &original[..], "incremental save keeps the original bytes");
-    let text = String::from_utf8_lossy(&saved[original.len()..]);
-    assert!(text.contains("/ModDate (D:20231114221320Z)"), "mod date stamped: {text}");
+    // Optimised PDF: a full rewrite, not an update appended to the original bytes.
+    assert!(!saved.starts_with(&original[..]), "a full rewrite");
+    assert_eq!(pdfcraft_cos::Document::open(saved.clone()).unwrap().revisions().len(), 1);
     s.mark_saved(id, saved.clone(), Some("/tmp/out/report.pdf".into())).unwrap();
     let doc = s.get(id).unwrap();
     assert!(!doc.dirty);
     assert_eq!(doc.name, "report.pdf");
     assert_eq!(doc.info_value("Title").as_deref(), Some("Quarterly report"));
     assert_eq!(doc.info.title.as_deref(), Some("Quarterly report"));
-    // Saving again without edits writes the same bytes; a later edit appends just one revision.
+    assert!(doc.info_value("ModDate").is_some_and(|d| d.contains("20231114221320")), "mod date stamped: {:?}", doc.info_value("ModDate"));
+    // Saving again without edits writes the same bytes; a later edit is another full rewrite.
     assert_eq!(s.save_bytes(id).unwrap(), saved);
     s.apply(id, Edit::RotatePages { pages: vec![1], degrees: -90 }).unwrap();
     let second = s.save_bytes(id).unwrap();
-    assert_eq!(&second[..saved.len()], &saved[..]);
+    assert!(!second.starts_with(&saved[..]));
     let reopened = pdfcraft_cos::Document::open(second).unwrap();
-    assert_eq!(reopened.revisions().len(), 3);
+    assert_eq!(reopened.revisions().len(), 1);
 }
 
 /// #1937: a file whose cross-reference data had to be rebuilt saved as its original bytes when
@@ -1004,7 +1005,7 @@ fn undo_to_the_opened_file_is_not_dirty() {
 }
 
 #[test]
-fn save_after_undo_retains_the_latest_saved_revision() {
+fn save_after_undo_writes_the_current_state_alone() {
     let (mut session, document) = session_with(3);
     session.apply(document, Edit::DeletePages { pages: vec![1] }).unwrap();
     let deleted = session.save_bytes(document).unwrap();
@@ -1012,14 +1013,14 @@ fn save_after_undo_retains_the_latest_saved_revision() {
     session.apply(document, Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
     let rotated = session.save_bytes(document).unwrap();
     session.mark_saved(document, rotated.clone(), None).unwrap();
-    let rotated_revisions = pdfcraft_cos::Document::open(rotated.clone()).unwrap().revisions().len();
 
     session.undo(document).unwrap();
     session.apply(document, Edit::SetInfo { key: "Title".into(), value: "Report".into() }).unwrap();
     let saved = session.save_bytes(document).unwrap();
-    assert!(saved.starts_with(rotated.as_slice()), "the saved rotation stays in the file");
+    // Optimised PDF: the current state alone, one revision, not appended to the saved rotation.
+    assert!(!saved.starts_with(rotated.as_slice()), "a full rewrite");
     let reopened = pdfcraft_cos::Document::open(saved.clone()).unwrap();
-    assert!(reopened.revisions().len() > rotated_revisions, "the title is a newer revision, not a rewrite of the earlier one");
+    assert_eq!(reopened.revisions().len(), 1);
     assert_eq!(pdfcraft_organize::info(&reopened, "Title").as_deref(), Some("Report"));
 
     session.mark_saved(document, saved, None).unwrap();
@@ -1831,7 +1832,7 @@ fn encrypted_documents_open_edit_and_save_encrypted() {
     assert!(s.get(id).unwrap().info.encrypted, "reported as encrypted");
     s.apply(id, Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
     let saved = s.save_bytes(id).unwrap();
-    assert_eq!(&saved[..bytes.len()], &bytes[..], "incremental");
+    assert!(!saved.starts_with(&bytes[..]), "a full rewrite (Optimised PDF)");
     assert!(pdfcraft_cos::Document::open(saved.clone()).is_err(), "still protected after saving");
     let mut s2 = Session::new();
     let id2 = s2.open("x.pdf", None, saved, Some("pw")).unwrap();
@@ -2627,7 +2628,9 @@ fn saving_a_password_protected_document_rebases_on_it() {
     assert!(!s.get(id).unwrap().dirty);
     s.apply(id, Edit::RotatePages { pages: vec![1], degrees: 90 }).unwrap();
     let again = s.save_bytes(id).unwrap();
-    assert_eq!(&again[..saved.len()], &saved[..], "the next save appends");
+    // Optimised PDF: the next save is another full rewrite, still protected.
+    let reopened = pdfcraft_cos::Document::open_with_password(again, Some("pw")).expect("opens with its password");
+    assert_eq!(reopened.revisions().len(), 1, "a full rewrite");
 }
 
 fn protection(open: Option<&str>, perms: Option<&str>) -> Protection {
@@ -3081,17 +3084,19 @@ fn the_first_signature_draws_the_fields_need_appearances_left_to_the_viewer() {
     let signed = s.sign(id, &digital_id, SignOptions { rect: None, ..SignOptions::default() }).unwrap();
     let doc = pdfcraft_cos::Document::open(signed.clone()).unwrap();
     assert!(!pdfcraft_forms::need_appearances(&doc));
-    assert!(normal_appearance(&doc, 4).contains("(Ada Lovelace) Tj"), "{}", normal_appearance(&doc, 4));
-    assert!(normal_appearance(&doc, 5).contains("(Plze?) Tj"), "{}", normal_appearance(&doc, 5));
-    assert!(normal_appearance(&doc, 6).contains("(Brno r) Tj"), "{}", normal_appearance(&doc, 6));
-    assert!(normal_appearance(&doc, 11).contains("(Main Street) Tj"), "{}", normal_appearance(&doc, 11));
+    // Optimised PDF: an unsigned document is rewritten in full before its first signature, which
+    // renumbers its objects, so widgets are found by field name.
+    let num = |d: &pdfcraft_cos::Document, name: &str| pdfcraft_forms::fields(d).into_iter().find(|f| f.name == name).unwrap().widgets[0].obj.num;
+    let shown = |name: &str| normal_appearance(&doc, num(&doc, name));
+    assert!(shown("name").contains("(Ada Lovelace) Tj"), "{}", shown("name"));
+    assert!(shown("town").contains("(Plze?) Tj"), "{}", shown("town"));
+    assert!(shown("city").contains("(Brno r) Tj"), "{}", shown("city"));
+    assert!(shown("street").contains("(Main Street) Tj"), "{}", shown("street"));
     // Its own appearance only paints a background, so `river` gets the drawing, `?` and all.
-    assert!(normal_appearance(&doc, 12).contains("(O?ech) Tj"), "{}", normal_appearance(&doc, 12));
-    let city = |d: &pdfcraft_cos::Document| d.get(pdfcraft_cos::ObjRef::new(6, 0)).as_dict().unwrap().get(b"AP").cloned();
+    assert!(shown("river").contains("(O?ech) Tj"), "{}", shown("river"));
     let original = pdfcraft_cos::Document::open(Arc::new(need_appearances_form())).unwrap();
-    assert_eq!(city(&doc), city(&original), "city keeps its own appearance");
-    let lake = |d: &pdfcraft_cos::Document| d.get(pdfcraft_cos::ObjRef::new(15, 0)).as_dict().unwrap().get(b"AP").cloned();
-    assert_eq!(lake(&doc), lake(&original), "lake keeps the appearance its form XObject draws");
+    assert_eq!(shown("city"), normal_appearance(&original, 6), "city keeps its own appearance");
+    assert_eq!(shown("lake"), normal_appearance(&original, 15), "lake keeps the appearance its form XObject draws");
     s.mark_signed(id, signed, None).unwrap();
     s.set_trusted_certificates(vec![digital_id.certificate.clone()]);
     let sig = &s.get(id).unwrap().signatures[0];
@@ -8186,7 +8191,8 @@ fn a_dynamic_xfa_form_is_saved_without_the_usage_rights_its_layout_voided() {
     assert!(!doc.dirty, "laying out is still not an edit");
     s.apply(id, Edit::SetFieldValue { name: "familyName".into(), value: FieldValue::Text("Singh".into()) }).unwrap();
     let incremental = s.save_bytes(id).unwrap();
-    assert!(incremental.starts_with(&original[..]), "still an incremental save");
+    // Optimised PDF: Save is a full rewrite too.
+    assert!(!incremental.starts_with(&original[..]), "a full rewrite");
     // Saved either way, the file no longer carries them, and keeps what was filled in.
     for saved in [incremental, s.save_full_bytes(id).unwrap()] {
         let cos = pdfcraft_cos::Document::open(saved.clone()).unwrap();
@@ -8222,12 +8228,12 @@ fn dynamic_xfa_forms_are_laid_out_on_open_filled_and_saved_incrementally() {
     let answer = doc.form.iter().find(|f| f.name == "answer").unwrap();
     assert_eq!(answer.widgets.iter().filter_map(|w| w.on_state.clone()).collect::<Vec<_>>(), ["Y", "N"]);
     assert!(page_texts(&s, id)[0].contains("Sample Form"), "{:?}", page_texts(&s, id));
-    // Fill it in and save: one more incremental revision on top.
+    // Fill it in and save: a full rewrite (Optimised PDF).
     s.apply(id, Edit::SetFieldValue { name: "familyName".into(), value: FieldValue::Text("Singh".into()) }).unwrap();
     s.apply(id, Edit::SetFieldValue { name: "answer".into(), value: FieldValue::Radio(Some("N".into())) }).unwrap();
     assert!(s.get(id).unwrap().dirty);
     let saved = s.save_bytes(id).unwrap();
-    assert!(saved.starts_with(&original[..]));
+    assert!(!saved.starts_with(&original[..]));
     // The datasets packet carries the values too, for Adobe's viewers.
     let cos = pdfcraft_cos::Document::open(saved.clone()).unwrap();
     let data = pdfcraft_xfa::parse_datasets(&pdfcraft_xfa::read_packets(&cos).unwrap().unwrap().xdp).expect("a datasets packet");
@@ -10308,7 +10314,7 @@ fn mixed_object_moves_are_one_undo_step_and_survive_save_reopen() {
         }
     }
     let moved = s.save_bytes(id).unwrap();
-    assert!(moved.starts_with(saved.as_ref()), "an incremental update preserves the original revision");
+    assert!(!moved.starts_with(saved.as_ref()), "a full rewrite (Optimised PDF)");
     let mut again = Session::new();
     let other = again.open("moved.pdf", None, moved.clone(), None).unwrap();
     assert_eq!(again.get(other).unwrap().editable_objects(0).unwrap(), after);
@@ -13738,12 +13744,13 @@ fn saving_after_a_batch_that_deletes_pages_rewrites_the_file() {
 }
 
 #[test]
-fn saving_without_deleting_pages_stays_incremental() {
+fn saving_without_deleting_pages_is_a_full_rewrite_too() {
     let (mut s, id) = session_with(3);
     let original = s.save_bytes(id).unwrap();
     s.apply(id, Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
     let saved = s.save_bytes(id).unwrap();
-    assert!(saved.starts_with(original.as_slice()), "an edit that deletes nothing is still appended");
+    // Optimised PDF: every save of a changed, unsigned document is a full rewrite.
+    assert!(!saved.starts_with(original.as_slice()), "an edit that deletes nothing is not appended either");
 }
 
 #[test]
@@ -15248,21 +15255,18 @@ fn a_document_encrypting_only_its_embedded_files_opens_and_saves_without_a_passw
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn script_objects_survive_incremental_save_but_not_a_full_rewrite() {
+fn script_objects_do_not_survive_a_save() {
+    // Optimised PDF: Save is a full rewrite, which renumbers objects, so the script realm starts
+    // afresh (document-level scripts run again on its next use); the field value is kept.
     let mut session = Session::new();
     let id = session.open("fields.pdf", None, Arc::new(scripted_form()), None).unwrap();
     session.set_javascript(true);
     let stored = session.run_javascript(id, "var retainedPrice = getField('price'); retainedPrice.value = '17';", None).unwrap();
     assert!(stored.error.is_none(), "{stored:?}");
-    let incremental = session.save_bytes(id).unwrap();
-    session.mark_saved(id, incremental.clone(), None).unwrap();
-    let after_incremental = session.run_javascript(id, "String(retainedPrice.value)", None).unwrap();
-    assert_eq!(after_incremental.result.as_deref(), Some("17"));
-    let full = session.save_full_bytes(id).unwrap();
-    assert!(!full.starts_with(incremental.as_slice()));
-    session.mark_saved(id, full, Some("rewritten.pdf".into())).unwrap();
-    let after_full = session.run_javascript(id, "typeof retainedPrice + ':' + getField('price').value", None).unwrap();
-    assert_eq!(after_full.result.as_deref(), Some("undefined:17"));
+    let saved = session.save_bytes(id).unwrap();
+    session.mark_saved(id, saved, Some("rewritten.pdf".into())).unwrap();
+    let after = session.run_javascript(id, "typeof retainedPrice + ':' + getField('price').value", None).unwrap();
+    assert_eq!(after.result.as_deref(), Some("undefined:17"));
 }
 
 #[test]
