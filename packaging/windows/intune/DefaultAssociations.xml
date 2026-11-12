@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Optimised PDF as the default PDF app (Intune Settings catalog: Application Defaults >
+     Default Associations Configuration, Base64-encoded). ProgId and name match the MSI's
+     registrations in packaging/windows/pdfcraft.wxs. -->
+<DefaultAssociations>
+  <Association Identifier=".pdf" ProgId="OptimisedPDF.Document" ApplicationName="Optimised PDF" />
+</DefaultAssociations>
