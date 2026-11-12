@@ -834,6 +834,10 @@ fn the_text_editor_keeps_the_boxs_alignment() {
 fn the_text_editor_aligns_a_narrow_box_to_its_own_edge() {
     let _gpu = gpu();
     let mut h = harness();
+    // Light, as upstream's default: the editor's Done and Discard buttons sit past the box in
+    // the theme's colours, and in Optimised PDF's dark default they would count as ink there.
+    h.state_mut().set_option("theme", "light").unwrap();
+    h.run_steps(2);
     let rect = [40.0, 195.0, 60.0, 210.0];
     let text = pdfcraft_engine::AddedText { rect, text: "Hi".into(), align: pdfcraft_engine::TextAlign::Right, ..Default::default() };
     assert!(h.state_mut().apply_edit(pdfcraft_engine::Edit::AddText { page: 0, text }));
@@ -882,6 +886,10 @@ fn format_text_sets_character_spacing_for_added_text() {
 fn the_text_editor_aligns_a_narrow_box_whose_lines_share_an_alignment() {
     let _gpu = gpu();
     let mut h = harness();
+    // Light, as upstream's default: the editor's Done and Discard buttons sit past the box in
+    // the theme's colours, and in Optimised PDF's dark default they would count as ink there.
+    h.state_mut().set_option("theme", "light").unwrap();
+    h.run_steps(2);
     let rect = [40.0, 195.0, 60.0, 210.0];
     let text = pdfcraft_engine::AddedText { rect, text: "Hi".into(), aligns: vec![Some(pdfcraft_engine::TextAlign::Right)], ..Default::default() };
     assert_eq!(text.align, pdfcraft_engine::TextAlign::Left);
@@ -909,11 +917,11 @@ fn mode_tab(h: &Harness<'static, PdfCraftApp>, label: &str) -> egui::Rect {
 }
 
 /// Scroll the page until `what` (on screen) lies across the mode bar, then the cursor over each
-/// tab it lies under: with the All tools panel closed, every tab: All tools, Edit, Convert and E-Sign.
+/// mode bar button it lies under (`support::mode_bar_cursors`).
 fn mode_tab_cursors(
     h: &mut Harness<'static, PdfCraftApp>,
     what: impl Fn(&Harness<'static, PdfCraftApp>) -> egui::Rect,
-) -> [(&'static str, egui::CursorIcon); 4] {
+) -> Vec<(String, egui::CursorIcon)> {
     let page = |h: &Harness<'static, PdfCraftApp>| h.state().views[0].page_screen_rect(0).expect("on screen");
     let y = what(h).center().y - page(h).top();
     let tabs = mode_tab(h, "Convert").center().y;
@@ -923,21 +931,8 @@ fn mode_tab_cursors(
     h.state_mut().views[0].goto = Some((0, (top - (tabs - y)) / page(h).height()));
     h.run_steps(4);
     let under = what(h);
-    ["All tools", "Edit", "Convert", "E-Sign"].map(|label| {
-        let at = mode_tab(h, label).center();
-        assert!(under.contains(at), "{under:?} lies under {label} at {at:?}");
-        h.hover_at(at);
-        h.run_steps(2);
-        (label, h.output().platform_output.cursor_icon)
-    })
+    crate::support::mode_bar_cursors(h, under)
 }
-
-const HAND_ON_EVERY_TAB: [(&str, egui::CursorIcon); 4] = [
-    ("All tools", egui::CursorIcon::PointingHand),
-    ("Edit", egui::CursorIcon::PointingHand),
-    ("Convert", egui::CursorIcon::PointingHand),
-    ("E-Sign", egui::CursorIcon::PointingHand),
-];
 
 /// Add text, with the page scrolled up under the mode bar, leaves its tabs the hand (#2755): the
 /// tool gave them its I-beam, added text its four-way arrow, and the open editor floated over
@@ -952,7 +947,7 @@ fn mode_tabs_keep_the_hand_over_added_text_scrolled_under_them() {
     h.run_steps(4);
     assert_eq!(h.state().quick_tool, QuickTool::AddText);
     // The empty page, ready for text.
-    assert_eq!(mode_tab_cursors(&mut h, |h| item_on_screen(h, [10.0, 290.0, 210.0, 305.0])), HAND_ON_EVERY_TAB, "the page under the tabs");
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, |h| item_on_screen(h, [10.0, 290.0, 210.0, 305.0])), "the page under the tabs");
     // Text kept by a click lower down, which starts a second box (#74).
     h.state_mut().views[0].goto = Some((0, 0.0));
     h.run_steps(4);
@@ -966,10 +961,10 @@ fn mode_tabs_keep_the_hand_over_added_text_scrolled_under_them() {
     h.run_steps(2);
     assert_eq!(texts(&h), ["Reviewed"]);
     let kept = added(&h)[0].content.rect();
-    assert_eq!(mode_tab_cursors(&mut h, |h| item_on_screen(h, kept)), HAND_ON_EVERY_TAB, "added text under the tabs");
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, |h| item_on_screen(h, kept)), "added text under the tabs");
     // The second box, still being typed.
     let draft = |h: &Harness<'static, PdfCraftApp>| item_on_screen(h, h.state().views[0].content.draft.as_ref().expect("the open box").rect);
-    assert_eq!(mode_tab_cursors(&mut h, draft), HAND_ON_EVERY_TAB, "the open box under the tabs");
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, draft), "the open box under the tabs");
     let convert = mode_tab(&h, "Convert").center();
     click(&mut h, convert);
     assert_eq!(h.state().mode, pdfcraft_ui_egui::Mode::Convert, "the tab takes the click, not the box");

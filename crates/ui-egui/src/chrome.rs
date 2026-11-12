@@ -72,11 +72,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     app.active = None;
                     app.combine_tab.focused = false;
                 }
-                // Reserve the three icon buttons, Discord and their gaps outside the scrolling tabs.
-                let controls_width = ui.fonts_mut(|f| f.layout_no_wrap("Discord".into(), theme::medium(13.0), t.text).size().x)
-                    + 3.0 * button
-                    + 54.0
-                    + window_controls::width(&controls.right);
+                // Reserve the three icon buttons and their gaps outside the scrolling tabs. (Optimised
+                // PDF has no Discord button: upstream's 38 pt of its padding is gone with it.)
+                let controls_width = 3.0 * button + 16.0 + window_controls::width(&controls.right);
                 // Open stays in sight after the tabs: its icon, text and padding, and the gaps around it.
                 let open_width = ui.fonts_mut(|f| f.layout_no_wrap(tl!("Open").into(), theme::medium(13.0), t.text).size().x) + 38.0 + 12.0;
                 let mut tabs_width = (ui.available_width() - controls_width - open_width).max(0.0);
@@ -581,6 +579,10 @@ fn tab(ui: &mut egui::Ui, spec: TabSpec<'_>, close: &mut Option<usize>) -> egui:
 const MODE_BAR_RIGHT: f32 = 32.0 + 4.0 + 8.0;
 /// Narrowest search field the mode bar shows; below it the field becomes an icon button.
 const MODE_BAR_SEARCH_MIN: f32 = 140.0;
+/// A divider in the mode bar with the 10 pt space either side of it.
+const MODE_BAR_DIVIDER: f32 = 21.0;
+/// Room for the folded mode menu ("All tools ▾" or the longest mode name, as a ghost button).
+const MODE_MENU_MIN: f32 = 120.0;
 
 pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
@@ -608,22 +610,31 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let rest = Rect::from_min_max(egui::pos2(ui.cursor().left(), ui.max_rect().top()), ui.max_rect().max);
                 let background = ui.interact(rest, ui.scope_id().with("toolbar-background"), egui::Sense::click());
                 // Optimised PDF: Save, Save As and Print come first, labelled: the actions used most.
-                // Greyed out with no document open.
+                // Greyed out with no document open. In a window too narrow for the labels and still
+                // the folded mode menu and search after them, they are icon buttons (as upstream's
+                // were), so the rest of the bar stays in the window.
                 let has_doc = app.active.is_some();
+                let actions = [("save", tl!("Save")), ("file-output", tl!("Save As")), ("printer", tl!("Print"))];
+                let labelled_w = actions.iter().map(|(_, l)| widgets::action_button_width(ui, l)).sum::<f32>() + 2.0 * 6.0;
+                let labelled = ui.available_width()
+                    >= labelled_w + 2.0 * MODE_BAR_DIVIDER + crate::toolbar::width(app, ui) + MODE_MENU_MIN + MODE_BAR_RIGHT + 32.0;
+                let action = |ui: &mut egui::Ui, (icon, label): (&str, &str), tip: &str| {
+                    if labelled { widgets::action_button(ui, icon, label, tip) } else { icons::button(ui, icon, 32.0, false, tip) }
+                };
                 ui.add_enabled_ui(has_doc, |ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
                     let tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
-                    if widgets::action_button(ui, "save", tl!("Save"), &tip).on_hover_text(&tip).clicked() {
+                    if action(ui, actions[0], &tip).on_hover_text(&tip).clicked() {
                         app.run_command("file.save");
                     }
                     let tip = crate::commands::command_tip(ui.ctx(), tl!("Save As ({key})"), "file.save_as");
-                    if widgets::action_button(ui, "file-output", tl!("Save As"), &tip).on_hover_text(&tip).clicked() {
+                    if action(ui, actions[1], &tip).on_hover_text(&tip).clicked() {
                         app.run_command("file.save_as");
                     }
                     let tip = crate::commands::command_tip(ui.ctx(), tl!("Print ({key})"), "print.dialog");
                     // A document that forbids printing says so here, before the dialog (#2669).
                     let may_print = !has_doc || pdfcraft_engine::commands::command("print.dialog").is_some_and(|c| app.command_enabled(c));
-                    let mut print = ui.add_enabled_ui(may_print, |ui| widgets::action_button(ui, "printer", tl!("Print"), &tip)).inner;
+                    let mut print = ui.add_enabled_ui(may_print, |ui| action(ui, actions[2], &tip)).inner;
                     print = if may_print { print.on_hover_text(&tip) } else { print.on_disabled_hover_text(crate::print_refused()) };
                     if print.clicked() {
                         app.run_command("print.dialog");

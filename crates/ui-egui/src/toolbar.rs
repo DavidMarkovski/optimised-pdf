@@ -167,6 +167,12 @@ pub(crate) fn pin_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
 }
 
 /// The pinned buttons and the pin button after them, in the mode bar's row.
+/// Width [`buttons`] takes: the pinned tools and the pin button, with egui's gaps between them.
+pub(crate) fn width(app: &PdfCraftApp, ui: &egui::Ui) -> f32 {
+    let n = app.toolbar_tools.iter().filter(|id| commands::command(id).is_some()).count() as f32 + 1.0;
+    n * BUTTON + (n - 1.0) * ui.spacing().item_spacing.x
+}
+
 pub(crate) fn buttons(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let mut slots = Vec::with_capacity(app.toolbar_tools.len());
@@ -180,7 +186,7 @@ pub(crate) fn buttons(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         let tip = crate::commands::command_tip(ui.ctx(), &format!("{label} ({{key}})"), id);
         let tip = if tip.ends_with(" ()") || tip.contains("({key})") { label.clone() } else { tip };
         let (rect, resp) = ui.allocate_exact_size(Vec2::splat(BUTTON), Sense::click_and_drag());
-        let resp = resp.on_hover_text(&tip);
+        let resp = crate::theme::hand(resp).on_hover_text(&tip);
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, &label));
         let tint = if enabled { t.icon } else { t.icon.gamma_multiply(0.4) };
         if resp.hovered() || resp.dragged() {

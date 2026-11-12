@@ -128,3 +128,38 @@ pub fn open_shortcuts_from_the_help_menu(h: &mut Harness<'static, PdfCraftApp>) 
     h.run_steps(4);
     assert!(h.state().dialog.is_some(), "Keyboard shortcuts is open");
 }
+
+/// The mode bar's buttons past its menus (Save, Save As, Print, the toolbar's pinned tools and
+/// pin button, the mode tabs) whose centre lies in `under`, and the cursor over each. Optimised
+/// PDF's Save, Save As and Print sit before the tabs, so which of them page content scrolled
+/// under the bar reaches depends on the layout; every one it reaches must keep the hand (#2755).
+pub fn mode_bar_cursors(h: &mut Harness<'static, PdfCraftApp>, under: egui::Rect) -> Vec<(String, egui::CursorIcon)> {
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::Queryable;
+    const BAR: [&str; 8] = ["Save", "Save As", "Print", "Add tools to the toolbar", "All tools", "Edit", "Convert", "E-Sign"];
+    let band = h.get_all_by_role_and_label(Role::Button, "Convert").map(|n| n.rect()).find(|r| r.bottom() < 120.0).expect("the Convert tab");
+    let mut reached: Vec<(String, egui::Pos2)> = Vec::new();
+    for name in BAR {
+        // A tooltip-named button reads "Save (Ctrl+S)"; the tabs are their bare labels.
+        for node in h.query_all_by(|n| n.role() == Role::Button && n.label().is_some_and(|l| l.split(" (").next() == Some(name))) {
+            let at = node.rect().center();
+            if band.y_range().contains(at.y) && under.contains(at) {
+                reached.push((name.to_owned(), at));
+            }
+        }
+    }
+    assert!(!reached.is_empty(), "{under:?} lies under none of the mode bar's buttons");
+    reached
+        .into_iter()
+        .map(|(label, at)| {
+            h.hover_at(at);
+            h.run_steps(2);
+            (label, h.output().platform_output.cursor_icon)
+        })
+        .collect()
+}
+
+/// Every button in `cursors` (from [`mode_bar_cursors`]) showed the hand.
+pub fn assert_hand_over_bar(cursors: &[(String, egui::CursorIcon)], what: &str) {
+    assert!(cursors.iter().all(|(_, c)| *c == egui::CursorIcon::PointingHand), "{what}: {cursors:?}");
+}

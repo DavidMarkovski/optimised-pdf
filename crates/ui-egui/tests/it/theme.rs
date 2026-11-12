@@ -45,29 +45,33 @@ fn open_view_menu(h: &mut Harness<'static, PdfCraftApp>) {
     }
 }
 
-/// A fresh install follows the desktop's appearance (#1248): dark on a dark desktop, light where
-/// the desktop says nothing; a saved choice still wins.
+/// Optimised PDF starts dark on a fresh install, whatever the desktop says; a saved choice,
+/// including System (#1248), still wins.
 #[test]
-fn a_fresh_install_follows_the_system_theme() {
+fn a_fresh_install_starts_dark() {
     let h = harness();
-    assert_theme(&h, ThemePreference::System, ThemeKind::Dark);
+    assert_theme(&h, ThemePreference::Dark, ThemeKind::Dark);
     let mut quiet = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app
     });
     quiet.run_steps(4);
-    assert_theme(&quiet, ThemePreference::System, ThemeKind::Light);
+    assert_theme(&quiet, ThemePreference::Dark, ThemeKind::Dark);
     let mut app = PdfCraftApp::new();
     app.restore(r#"{"theme":"Light"}"#);
     assert_eq!(app.theme_preference, ThemePreference::Light, "a saved choice wins over the default");
+    app.restore(r#"{"theme":"System"}"#);
+    assert_eq!(app.theme_preference, ThemePreference::System, "and so does a saved System");
 }
 
 #[test]
 fn toolbar_and_view_menu_share_three_state_preferences() {
     let mut h = harness();
-    // Fresh, on a dark desktop: System, shown dark. One click on, explicit light wins even on a
-    // dark desktop, including egui's popup style.
+    // Fresh: Dark. One click on, System, shown dark on this dark desktop. One more, explicit
+    // light wins even on a dark desktop, including egui's popup style.
+    assert_theme(&h, ThemePreference::Dark, ThemeKind::Dark);
+    click_toolbar(&mut h, "Dark gray");
     assert_theme(&h, ThemePreference::System, ThemeKind::Dark);
     click_toolbar(&mut h, "Use system setting");
     assert_theme(&h, ThemePreference::Light, ThemeKind::Light);
@@ -234,15 +238,15 @@ fn preferences_theme_cards_and_use_system_setting_stay_in_sync() {
         combo.value().unwrap_or_default()
     }
     let mut h = harness();
-    h.get_by_label("Display theme: Use system setting").click_secondary();
+    h.get_by_label("Display theme: Dark gray").click_secondary();
     h.run_steps(4);
     h.get_by_label("Appearance settings…").click();
     h.run_steps(10);
-    // A fresh install follows the OS (#1248), which is dark here.
-    assert_theme(&h, ThemePreference::System, ThemeKind::Dark);
-    assert_eq!(mode_shown(&h), "Use system setting");
+    // A fresh install starts dark.
+    assert_theme(&h, ThemePreference::Dark, ThemeKind::Dark);
+    assert_eq!(mode_shown(&h), "Dark");
 
-    // The OS is dark: the Dark card picks Dark, and the combo box says so.
+    // The Dark card keeps Dark, and the combo box says so.
     // The cards sit below the fold of the Preferences scroll area at this window size.
     h.get_by_label("Dark theme").scroll_to_me();
     h.run_steps(3);
