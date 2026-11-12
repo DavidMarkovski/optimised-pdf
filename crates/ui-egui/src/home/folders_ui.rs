@@ -330,6 +330,7 @@ impl PdfCraftApp {
 
 /// The Home view's Folders section (desktop only: the web build has no folders to read).
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)] // Optimised PDF: Home shows no Folders section; kept to ease upstream merges.
 pub(crate) fn section(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     use egui::{Align2, CornerRadius, Rect, Sense, vec2};
 

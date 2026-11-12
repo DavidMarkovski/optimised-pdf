@@ -9,6 +9,7 @@ use crate::{PdfCraftApp, icons, panels::human_size, widgets};
 
 pub mod folders_ui;
 
+#[allow(dead_code)] // Optimised PDF: Home shows no tool cards; kept to ease upstream merges.
 const RECOMMENDED: [&str; 5] = ["organize", "comment", "form", "edit", "protect"];
 
 /// A soft shadow that rises on hover and settles when the card is pressed.
@@ -22,6 +23,7 @@ pub(crate) fn card_lift(ui: &egui::Ui, t: &Tokens, rect: Rect, press: theme::Pre
 
 /// Render a single tool card with the standard lift, styling, icon, title, description, and action.
 /// If `allow_unpin` is true, an unpin button is always accessible in the top right corner.
+#[allow(dead_code)] // Optimised PDF: see RECOMMENDED.
 fn tool_card(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static catalog::ToolGroup, allow_unpin: bool) -> Option<&'static str> {
     let (rect, resp) = ui.allocate_exact_size(vec2(190.0, 104.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!(g.label)));
@@ -71,47 +73,14 @@ fn tool_card(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static c
     }
 }
 
-/// Draw the Home page with the welcome text, community card and recent documents.
+/// Draw the Home page with the welcome text and recent documents.
 pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(egui::Margin { left: 36, right: 36, top: 28, bottom: 28 }).show(ui, |ui| {
-            ui.label(egui::RichText::new(tl!("Welcome to PdfCraft")).font(theme::semibold(24.0)));
-            ui.label(
-                egui::RichText::new(tl!("An open-source PDF workbench — local, private, and scriptable."))
-                    .color(t.text_muted)
-                    .font(theme::regular(14.0)),
-            );
+            ui.label(egui::RichText::new(tl!("Welcome to Optimised PDF")).font(theme::semibold(24.0)));
+            ui.label(egui::RichText::new(tl!("Optimised Accounting's offline PDF app.")).color(t.text_muted).font(theme::regular(14.0)));
             ui.add_space(14.0);
-            if !app.community_card_closed {
-                egui::Frame::NONE
-                    .fill(t.card)
-                    .stroke(Stroke::new(1.0, t.border))
-                    .corner_radius(CornerRadius::same(12))
-                    .inner_margin(egui::Margin::same(14))
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
-                            widgets::artcraft_mark(ui, 28.0);
-                            ui.vertical(|ui| {
-                                ui.label(egui::RichText::new(tl!("Join the ArtCraft community")).font(theme::semibold(15.0)));
-                                ui.label(egui::RichText::new(tl!("Get help, share feedback and follow development on Discord.")).color(t.text_muted));
-                            });
-                            // Closed for this run only: the card is back on the next launch.
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                                if icons::button(ui, "x", 24.0, false, tl!("Close")).clicked() {
-                                    app.community_card_closed = true;
-                                }
-                            });
-                        });
-                        ui.add_space(8.0);
-                        if let Some(cmd) = widgets::community_links(ui) {
-                            app.execute(cmd);
-                        }
-                    });
-                ui.add_space(22.0);
-            }
-
             egui::Frame::NONE
                 .fill(t.card)
                 .stroke(Stroke::new(1.0, t.border))
@@ -119,17 +88,10 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 .inner_margin(egui::Margin::same(18))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(egui::RichText::new(tl!("Recommended tools")).font(theme::semibold(15.0)));
-                    ui.add_space(10.0);
+                    // Optimised PDF's Home is Open file and Recent only: no recommended or pinned
+                    // tool cards, pinned folders or privacy note (they are reached from All tools).
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
-                        for id in RECOMMENDED {
-                            if app.is_tool_pinned(id) {
-                                continue;
-                            }
-                            let Some(g) = catalog::group(id) else { continue };
-                            tool_card(app, ui, &t, g, false);
-                        }
                         let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!("Open file")));
                         let press = theme::Press::track(ui, &resp);
@@ -150,42 +112,6 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     });
                 });
 
-            ui.add_space(26.0);
-            let mut unpin_tool = None;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(tl!("Pinned Tools")).font(theme::semibold(17.0)));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::ghost_button(ui, "pin", tl!("Pin a tool…")).clicked() {
-                        app.dialog = Some(crate::Dialog::PinTool);
-                    }
-                });
-            });
-            ui.add_space(4.0);
-            if app.pinned_tools.is_empty() {
-                ui.label(egui::RichText::new(tl!("Pin your favorite tools here for quick access.")).color(t.text_muted));
-            } else {
-                ui.add_space(6.0);
-                let pinned = app.pinned_tools.clone();
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
-                    for id in &pinned {
-                        let Some(g) = catalog::group(id) else { continue };
-                        if let Some(to_unpin) = tool_card(app, ui, &t, g, true) {
-                            unpin_tool = Some(to_unpin);
-                        }
-                    }
-                });
-            }
-            if let Some(id) = unpin_tool {
-                app.unpin_tool(id);
-            }
-
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                ui.add_space(26.0);
-                crate::folders_ui::section(app, ui);
-            }
-
             let mut clear = false;
             // Preferences can turn the list off (#5572).
             if app.recent_limit > 0 {
@@ -202,7 +128,9 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
                 ui.add_space(8.0);
                 if app.recent.is_empty() {
-                    ui.label(egui::RichText::new(tl!("Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.")).color(t.text_muted));
+                    ui.label(
+                        egui::RichText::new(tl!("Files you open in Optimised PDF appear here. Drop a PDF anywhere to open it.")).color(t.text_muted),
+                    );
                 }
             }
             let mut open = None;
@@ -266,12 +194,6 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             if clear {
                 app.execute("file.clear_recent");
             }
-            ui.add_space(20.0);
-            widgets::section_title(ui, tl!("Privacy"));
-            ui.label(
-                egui::RichText::new(tl!("PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider."))
-                    .color(t.text_muted),
-            );
         });
     });
 }
@@ -298,6 +220,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Optimised PDF: Home shows no tool cards"]
     fn review_pinned_recommended_tools_appear_once() {
         use egui_kittest::kittest::Queryable;
         let mut h = review_home_harness();
@@ -306,6 +229,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Optimised PDF: Home shows no tool cards"]
     fn review_a_pinned_tool_can_be_unpinned_without_hover() {
         use egui_kittest::kittest::Queryable;
         let mut h = review_home_harness();
@@ -316,6 +240,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Optimised PDF: Home shows no tool cards"]
     fn translated_card_description_leaves_room_for_the_action() {
         if !crate::i18n::needs_catalogs() {
             return;

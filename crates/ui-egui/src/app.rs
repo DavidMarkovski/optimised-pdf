@@ -44,7 +44,7 @@ impl PdfCraftApp {
         let mark = if dirty { " •" } else { "" };
         let titled = |name: Option<String>| {
             name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-                .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name}{mark} — PdfCraft"))
+                .map_or_else(|| "Optimised PDF".to_owned(), |name| format!("{name}{mark} — Optimised PDF"))
         };
         let title = titled(front.and_then(|i| crate::canvas::tab_label(self, i)));
         // The web page's title is what an embedding host reads to tell which file opened, so it
@@ -98,9 +98,9 @@ impl PdfCraftApp {
             full_screen_tool: None,
             comment_prefs: Default::default(),
             hotbar: Default::default(),
-            theme: ThemeKind::Light,
+            theme: ThemeKind::Dark,
             // A fresh install follows the desktop's appearance (#1248); saved settings override.
-            theme_preference: ThemePreference::System,
+            theme_preference: ThemePreference::Dark,
             reading_colors: Default::default(),
             show_page_edge_shadows: true,
             #[cfg(target_os = "linux")]

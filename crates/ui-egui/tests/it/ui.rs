@@ -32,11 +32,14 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 }
 
 #[test]
-fn home_shows_welcome_and_tools() {
+fn home_shows_welcome_open_file_and_recent_only() {
     let h = harness(|_| {});
-    h.get_by_label_contains("Welcome to PdfCraft");
-    assert!(h.query_all_by_label("Organize pages").count() >= 2, "tool list + home card");
+    h.get_by_label_contains("Welcome to Optimised PDF");
     h.get_by_label("Open file");
+    // Optimised PDF's Home has no tool cards, pinned tools, folders or privacy note.
+    for gone in ["Recommended tools", "Pinned Tools", "Pin a tool…", "Privacy"] {
+        assert!(h.query_by_label_contains(gone).is_none(), "{gone:?} must not show on Home");
+    }
 }
 
 #[test]
@@ -238,7 +241,7 @@ fn another_tab_coming_forward_puts_the_expanded_all_tools_away() {
     h.state_mut().set_option("home", "").unwrap();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Optimised PDF");
     // Another document's tab.
     let mut h = harness(|app| {
         app.open_bytes("one.pdf", None, FIXTURE.to_vec()).expect("fixture opens");
@@ -258,7 +261,7 @@ fn going_home_with_no_document_puts_the_expanded_all_tools_away() {
     h.state_mut().set_option("home", "").unwrap();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Optimised PDF");
 }
 
 #[test]
@@ -695,8 +698,8 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
         }
     });
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.right() <= discord.left(), "Open {open:?} must not run under Discord {discord:?}");
+    let help = h.get_by_label("Keyboard shortcuts").rect();
+    assert!(open.right() <= help.left(), "Open {open:?} must not run under Keyboard shortcuts {help:?}");
     let mut previous_right = f32::MIN;
     for i in 0..5 {
         let tab = h.get_by_label(&name(i)).rect();
@@ -1648,7 +1651,7 @@ fn closing_the_last_active_tab_selects_the_previous_one_then_home() {
         assert!(app.session.get(ids[removed]).is_none());
     }
     assert_eq!(h.state().active, None);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to Optimised PDF");
 }
 
 #[test]

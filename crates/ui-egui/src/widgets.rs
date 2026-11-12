@@ -632,40 +632,35 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     cancel
 }
 
-/// The ArtCraft wordmark (Storyteller's brand, docs/brand/; not open source), sized to `height`.
-pub fn artcraft_logo(ui: &mut egui::Ui, height: f32) -> Response {
-    let dark = ui.visuals().dark_mode;
-    let (uri, bytes): (&str, &'static [u8]) = if dark {
-        ("bytes://artcraft-logo-white.svg", include_bytes!("../../../docs/brand/artcraft-logo-white.svg"))
+/// A labelled 36 px button with an icon (Optimised PDF's Save, Save As and Print). `name` is what
+/// a screen reader hears.
+pub fn action_button(ui: &mut egui::Ui, icon: &str, label: &str, name: &str) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let font = theme::medium(13.5);
+    let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
+    let (rect, resp) = ui.allocate_exact_size(vec2(w + 52.0, 36.0), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), name));
+    let enabled = ui.is_enabled();
+    let (fill, ink) = if !enabled {
+        (t.card, t.text_faint)
+    } else if resp.hovered() {
+        (t.hover, t.text)
     } else {
-        ("bytes://artcraft-logo.svg", include_bytes!("../../../docs/brand/artcraft-logo.svg"))
+        (t.card, t.text)
     };
-    ui.add(egui::Image::from_bytes(uri, bytes).max_height(height).alt_text("ArtCraft"))
+    ui.painter().rect(rect, CornerRadius::same(18), fill, Stroke::new(1.2, if enabled { t.text_muted } else { t.border }), egui::StrokeKind::Inside);
+    crate::icons::paint(ui, Rect::from_min_size(rect.min + vec2(13.0, 9.0), vec2(18.0, 18.0)), icon, 18.0, ink);
+    ui.painter().text(rect.left_center() + vec2(38.0, 0.0), Align2::LEFT_CENTER, label, font, ink);
+    resp
 }
 
-/// The ArtCraft mark (brand blue, works on light and dark), `size` points square.
-pub fn artcraft_mark(ui: &mut egui::Ui, size: f32) -> Response {
+/// Optimised PDF's app icon (the red "PDF" tile), `size` points square.
+pub fn app_mark(ui: &mut egui::Ui, size: f32) -> Response {
     ui.add(
-        egui::Image::from_bytes("bytes://artcraft-mark.svg", include_bytes!("../../../docs/brand/artcraft-mark.svg"))
+        egui::Image::from_bytes("bytes://optimised-pdf-icon.svg", include_bytes!("../../../assets/app-icon/pdfcraft-small.svg"))
             .fit_to_exact_size(vec2(size, size))
-            .alt_text("ArtCraft"),
+            .alt_text("Optimised PDF"),
     )
-}
-
-/// Buttons for every community link (`pdfcraft_engine::links`), Discord first and prominent.
-/// Returns the registry command of the one clicked.
-pub fn community_links(ui: &mut egui::Ui) -> Option<&'static str> {
-    let mut clicked = None;
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
-        for (i, l) in pdfcraft_engine::links::LINKS.iter().enumerate() {
-            let resp = if i == 0 { icon_pill(ui, l.icon, tl!("Join our Discord"), true) } else { icon_pill(ui, l.icon, tl!(l.label), false) };
-            if resp.on_hover_text(l.url).clicked() {
-                clicked = Some(l.command);
-            }
-        }
-    });
-    clicked
 }
 
 /// [`icon_pill`] with a ▾ part at its end that opens a menu of related choices. Returns the
