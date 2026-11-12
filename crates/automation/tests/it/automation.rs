@@ -90,7 +90,8 @@ fn saving_a_pdf_keeps_the_destinations_extended_attributes() {
     for full in [false, true] {
         ok(&mut a, "page_rotate", json!({"doc": doc, "pages": [1], "degrees": 90}));
         let saved = ok(&mut a, "doc_save", json!({"doc": doc, "full": full}));
-        assert_eq!(saved["incremental"], !full);
+        // Optimised PDF: a changed document is always rewritten in full.
+        assert_eq!(saved["incremental"], false);
         for (name, value) in attributes {
             let mut bytes = [0u8; 256];
             let len = getxattr(&target, *name, &mut bytes[..]).unwrap();
@@ -1004,14 +1005,12 @@ fn edit_undo_redo_and_save_round_trip() {
     assert_eq!(info["pages"][0]["rotation"], 90);
     assert_eq!(page_text(&mut b, re), ["Page 3", "Page 2", "Page 1", ""]);
 
-    // Saving in place appends an incremental update.
+    // Saving in place is a full rewrite too (Optimised PDF): one revision, no appended update.
     ok(&mut b, "doc_set_info", json!({ "doc": re, "key": "Author", "value": "Agent" }));
-    let before = std::fs::metadata(dir.join("out/edited.pdf")).unwrap().len();
     let again = ok(&mut b, "doc_save", json!({ "doc": re }));
-    assert_eq!(again["incremental"], true);
+    assert_eq!(again["incremental"], false);
     let after = std::fs::read(dir.join("out/edited.pdf")).unwrap();
-    assert!(after.len() as u64 > before);
-    assert_eq!(after.windows(5).filter(|w| w == b"%%EOF").count(), 2);
+    assert_eq!(after.windows(5).filter(|w| w == b"%%EOF").count(), 1);
 }
 
 /// A shallow-object destination tree: `depth` single-child nodes above `count` names.
@@ -1067,7 +1066,8 @@ fn assert_destination_state(a: &Automation, doc: u64, depth: usize, count: usize
 }
 
 /// Exercise the real tools, including named destinations after undo and redo, and check both
-/// kinds of save explicitly: a full copy, followed by an incremental update of that copy.
+/// saves explicitly: a full copy, then a save in place of that copy (also a full rewrite in
+/// Optimised PDF).
 fn delete_destination_tree_through_tools(depth: usize, count: usize, label: &str) {
     let dir = workdir(label);
     let original = destination_graph_fixture(depth, count);
@@ -1101,9 +1101,9 @@ fn delete_destination_tree_through_tools(depth: usize, count: usize, label: &str
     assert_eq!(ok(&mut b, "doc_info", json!({"doc":reopened}))["title"], "Unsaved work");
     ok(&mut b, "doc_set_info", json!({"doc":reopened,"key":"Author","value":"Incremental probe"}));
     let saved = ok(&mut b, "doc_save", json!({"doc":reopened}));
-    assert_eq!(saved["incremental"], true);
-    let incremental = std::fs::read(dir.join("saved.pdf")).unwrap();
-    assert!(incremental.len() > full.len() && incremental.starts_with(&full));
+    assert_eq!(saved["incremental"], false);
+    let rewritten = std::fs::read(dir.join("saved.pdf")).unwrap();
+    assert!(!rewritten.starts_with(&full), "a full rewrite, not appended to the copy");
     let mut b = auto(&dir);
     let reopened = ok(&mut b, "doc_open", json!({"path":"saved.pdf"}))["doc"].as_u64().unwrap();
     assert_destination_state(&b, reopened, depth, count, true);
@@ -1132,7 +1132,8 @@ fn an_in_place_save_reports_a_required_rewrite_as_not_incremental() {
     let dir = workdir("save-incremental-flag");
     let original = std::fs::read(dir.join("a.pdf")).unwrap();
     let cases = [
-        ("page_rotate", json!({ "pages": [1], "degrees": 90 }), true),
+        // Optimised PDF: every save of a changed document is a rewrite.
+        ("page_rotate", json!({ "pages": [1], "degrees": 90 }), false),
         ("doc_protect", json!({ "open_password": "openme" }), false),
         ("doc_remove_hidden", json!({}), false),
     ];
@@ -13577,7 +13578,8 @@ fn paragraph_grouping_survives_save_and_reopen_through_tools() {
     assert_eq!(paragraph_texts(&mut a, doc).len(), 2);
     ok(&mut a, "text_edit", json!({ "doc": doc, "page": 1, "paragraph": 1, "text": "Alpha first row.\nTwo\nThree" }));
     let incremental = ok(&mut a, "doc_save", json!({ "doc": doc, "path": "partial.pdf" }));
-    assert_eq!(incremental["incremental"], true, "{incremental}");
+    // Optimised PDF: saving in place is a full rewrite too.
+    assert_eq!(incremental["incremental"], false, "{incremental}");
     let reopened = ok(&mut a, "doc_open", json!({ "path": "partial.pdf" }))["doc"].as_u64().unwrap();
     assert_eq!(paragraph_texts(&mut a, reopened), ["Alpha first row. Two Three", "Neighbor stays."]);
     ok(&mut a, "text_edit", json!({ "doc": reopened, "page": 1, "paragraph": 1, "text": "Alpha first row.\nTwo\nFour" }));
@@ -13637,7 +13639,8 @@ fn a_shared_text_object_keeps_both_paragraphs_through_tools() {
     ok(&mut a, "text_edit", json!({ "doc": doc, "page": 1, "paragraph": 2, "text": "Neighbor stays.\nChanged." }));
     assert_eq!(paragraph_texts(&mut a, doc), ["Alpha first row. Alpha next row.", "Neighbor stays. Changed."]);
     let incremental = ok(&mut a, "doc_save", json!({ "doc": doc, "path": "last.pdf" }));
-    assert_eq!(incremental["incremental"], true, "{incremental}");
+    // Optimised PDF: saving in place is a full rewrite too.
+    assert_eq!(incremental["incremental"], false, "{incremental}");
     let reopened = ok(&mut a, "doc_open", json!({ "path": "last.pdf" }))["doc"].as_u64().unwrap();
     assert_eq!(paragraph_texts(&mut a, reopened), ["Alpha first row. Alpha next row.", "Neighbor stays. Changed."]);
     ok(&mut a, "text_edit", json!({ "doc": reopened, "page": 1, "paragraph": 2, "text": "Neighbor stays.\nEdited." }));

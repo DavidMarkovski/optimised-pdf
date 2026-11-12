@@ -515,7 +515,7 @@ fn insert_blank_page_after_selection() {
 }
 
 #[test]
-fn save_writes_an_incremental_update_and_clears_dirty() {
+fn save_writes_a_full_rewrite_and_clears_dirty() {
     let out = temp_path("saved.pdf");
     let original = fixture(3);
     let target = out.to_string_lossy().into_owned();
@@ -528,7 +528,9 @@ fn save_writes_an_incremental_update_and_clears_dirty() {
     h.key_press_modifiers(Modifiers::COMMAND, Key::S);
     h.run_steps(3);
     let saved = std::fs::read(&out).expect("file written");
-    assert_eq!(&saved[..original.len()], &original[..], "original bytes untouched");
+    // Optimised PDF: Save writes a full rewrite, one revision, not an update appended to the original.
+    assert!(!saved.starts_with(&original[..]), "a full rewrite");
+    assert_eq!(saved.windows(5).filter(|w| w == b"%%EOF").count(), 1, "one revision");
     assert!(!dirty(&h));
     h.get_by_label("saved.pdf"); // the tab takes the new name, no edited marker
     // What was written is what the app now shows.
@@ -5712,7 +5714,8 @@ fn save_paragraph_drag(h: &mut Harness<'static, PdfCraftApp>, name: &str, origin
     h.key_press_modifiers(Modifiers::COMMAND, Key::S);
     h.run_steps(4);
     let saved = std::fs::read(&out).unwrap();
-    assert!(saved.starts_with(original), "Save keeps the opened/saved revisions");
+    // Optimised PDF: Save is a full rewrite, so the opened revision is not kept.
+    assert!(!saved.starts_with(original), "Save writes a full rewrite");
     assert!(!h.state().session.get(id).unwrap().dirty);
     assert_eq!(h.state().session.get(id).unwrap().bytes.as_slice(), saved.as_slice());
     std::fs::remove_file(out).unwrap();

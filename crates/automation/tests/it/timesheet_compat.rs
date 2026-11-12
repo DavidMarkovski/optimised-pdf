@@ -30,8 +30,12 @@ fn fixture() -> Vec<u8> {
             )
             .unwrap();
     }
-    let mut doc = Document::open(session.save_bytes(id).unwrap()).unwrap();
-    let source = session.get(id).unwrap().form.iter().find(|f| f.name == "source").unwrap().obj;
+    let saved = session.save_bytes(id).unwrap();
+    let mut doc = Document::open(saved.clone()).unwrap();
+    // Save is a full rewrite (Optimised PDF), which renumbers objects: find the field in the saved file.
+    let mut reopened = Session::new();
+    let rid = reopened.open("saved.pdf", None, saved, None).unwrap();
+    let source = reopened.get(rid).unwrap().form.iter().find(|f| f.name == "source").unwrap().obj;
     let mut gs = Dict::new();
     gs.set(b"ca".to_vec(), Object::Real(0.5));
     let mut states = Dict::new();
@@ -196,8 +200,12 @@ fn exact_image_field_tool_targets_duplicates_and_rejects_invalid_ids() {
     for (name, x) in [("first", 20.0), ("second", 160.0)] {
         session.apply(id, Edit::AddField { page: 0, rect: [x, 20.0, x + 100.0, 80.0], kind: NewField::Image, name: Some(name.into()) }).unwrap();
     }
-    let mut cos = Document::open(session.save_bytes(id).unwrap()).unwrap();
-    for field in session.get(id).unwrap().form.iter() {
+    let saved = session.save_bytes(id).unwrap();
+    let mut cos = Document::open(saved.clone()).unwrap();
+    // Save is a full rewrite (Optimised PDF), which renumbers objects: take the fields from the saved file.
+    let mut reopened = Session::new();
+    let rid = reopened.open("saved.pdf", None, saved, None).unwrap();
+    for field in reopened.get(rid).unwrap().form.iter() {
         cos.update_dict(field.obj, |d| d.set(b"T".to_vec(), pdfcraft_cos::PdfString::text("same"))).unwrap();
     }
     std::fs::write(dir.join("synthetic.pdf"), write_full(&cos, &Default::default()).unwrap()).unwrap();

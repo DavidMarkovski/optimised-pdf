@@ -1780,10 +1780,13 @@ mod snapshot_review_tests {
         session.redo(id).unwrap();
         let saved = session.save_bytes(id).unwrap();
         session.mark_saved(id, saved, Some("after.pdf".into())).unwrap();
+        // Optimised PDF: Save is a full rewrite, so the script realm starts afresh (`retained`
+        // is gone); the metadata follows the save.
         assert_eq!(
-            session.run_javascript(id, "[documentFileName,numPages,info.title,retained].join('/');", None).unwrap().result.as_deref(),
-            Some("after.pdf/2/After/41")
+            session.run_javascript(id, "[documentFileName,numPages,info.title,typeof retained].join('/');", None).unwrap().result.as_deref(),
+            Some("after.pdf/2/After/undefined")
         );
+        session.run_javascript(id, "var retained=41;", None).unwrap();
         session.apply(id, Edit::DeletePages { pages: vec![1] }).unwrap();
         assert_eq!(session.run_javascript(id, "[numPages,retained].join('/');", None).unwrap().result.as_deref(), Some("1/41"));
         session.undo(id).unwrap();

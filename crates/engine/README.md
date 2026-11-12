@@ -34,11 +34,14 @@ Each open document holds a `pdfcraft_cos::Document`: the object graph plus a cop
 2. After every edit the **working file** is produced by an incremental write: the original bytes
    plus one appended revision.
 3. The view is refreshed from those bytes, so **what you see is exactly what Save will write**.
-4. Saving rebases onto the written bytes, so the next save appends only new edits.
+4. Saving rebases onto the written bytes.
 
-Consequences worth preserving: the original bytes of an opened file are never rewritten in place; a
-full rewrite happens only where it must (redaction, PDF/A conversion, print imposition, a changed
-password); and unknown data survives a round trip because nothing is reconstructed that wasn't
+Optimised PDF: the working file lives in memory only. Save and Save As write a **full rewrite** of a
+changed, unsigned document (only the objects it still uses, checked to reopen as one revision with
+the same security), never an incremental update, because an appended update keeps the earlier
+revision and with it whatever the edits removed. A digitally signed document is still updated
+incrementally so its signatures keep covering the bytes they signed; an unchanged document keeps
+its bytes. Unknown data still survives a round trip, because nothing is reconstructed that wasn't
 understood.
 
 ## API
@@ -55,8 +58,8 @@ let doc = s.get(id).ok_or("gone")?;                         // &Document: querie
 doc.can_undo(); doc.editable(); doc.allows_printing();
 doc.text_blocks(page); doc.page_boxes(page); doc.security_summary();
 
-let bytes = s.save_bytes(id)?;        // incremental: keeps signatures over earlier revisions valid
-let bytes = s.save_full_bytes(id)?;   // full rewrite, garbage-collected
+let bytes = s.save_bytes(id)?;        // full rewrite when changed; incremental only for a signed file
+let bytes = s.save_full_bytes(id)?;   // full rewrite, garbage-collected; refuses a signed file
 s.mark_saved(id, bytes.clone(), path)?;
 ```
 

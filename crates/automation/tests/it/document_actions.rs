@@ -70,20 +70,22 @@ fn open_will_save_will_print_and_field_events_share_the_document_realm() {
     assert!(a.call("js_event", &json!({ "doc": doc, "field": "hot", "event": "keystroke" })).is_err());
     assert!(a.call("js_event", &json!({ "doc": doc, "field": "hot", "event": "mouse_up", "widget": 2 })).is_err());
 
-    // Saved in place (incrementally): object numbers stay, so the realm is kept. A full
-    // rewrite starts a fresh realm for the next event.
+    // Saved in place: a full rewrite in Optimised PDF, which starts a fresh realm for the next
+    // event; the log is a field value, so it carries on.
     let saved = tool(&mut a, "doc_save", json!({ "doc": doc }));
-    assert_eq!(saved["incremental"], true, "{saved}");
+    assert_eq!(saved["incremental"], false, "{saved}");
     std::fs::copy(dir.join("form.pdf"), dir.join("saved.pdf")).unwrap();
     assert_eq!(saved["will_save"]["console"], json!(["saving"]), "{saved}");
     assert_eq!(log(&mut a, doc), "open1 Mouse Enter2 Blur save3");
 
+    // Optimised PDF: the fresh realm after the rewrite no longer holds the open action's `n`,
+    // so Will Print reports the error and adds nothing to the log.
     let printed = tool(&mut a, "doc_print", json!({ "doc": doc, "path": "printed.pdf" }));
-    assert!(printed.get("will_print").is_none(), "nothing to report: {printed}");
-    assert_eq!(log(&mut a, doc), "open1 Mouse Enter2 Blur save3 print4");
+    assert!(printed["will_print"]["errors"][0].as_str().is_some_and(|e| e.contains("n is not defined")), "{printed}");
+    assert_eq!(log(&mut a, doc), "open1 Mouse Enter2 Blur save3");
     // A print with nowhere to go fails before Will Print runs.
     assert!(a.call("doc_print", &json!({ "doc": doc })).is_err());
-    assert_eq!(log(&mut a, doc), "open1 Mouse Enter2 Blur save3 print4");
+    assert_eq!(log(&mut a, doc), "open1 Mouse Enter2 Blur save3");
 
     // What Will Save changed is in the saved file.
     tool(&mut a, "js_enabled", json!({ "enabled": false }));
