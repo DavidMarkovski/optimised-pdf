@@ -24,12 +24,18 @@ fn assert_window_stack_graph(root: &std::path::Path, name: &str, version: &str) 
             "{name} must pin the fork's 40-character revision, not {source}"
         );
     }
-    // A path patch has no `source =` in Cargo.lock. The local integration config is the only
-    // allowed path source; a machine-local path must never be in the published manifest,
-    // which the root-manifest assertion below checks. A path entry carries no remote identity
-    // to verify, so this test does not claim the resolved code is the published fork.
+    // A path patch has no `source =` in Cargo.lock. Optimised PDF vendors storytold's git
+    // revisions under `vendor/git` (see vendor/git/README.md), so the only allowed path patch
+    // is `vendor/git/{name}`; the retained `vendor/{name}` copy is provenance only and must
+    // never come back as a patch. A machine-local path is also never allowed.
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("root Cargo.toml");
-    assert!(!manifest.contains(&format!("{name} = {{ path = \"vendor/")), "vendor/{name} must not be a published path patch");
+    assert!(!manifest.contains(&format!("{name} = {{ path = \"vendor/{name}\"")), "vendor/{name} must not be a published path patch");
+    if !package.contains("\nsource = ") {
+        assert!(
+            manifest.contains(&format!("{name} = {{ path = \"vendor/git/{name}\" }}")),
+            "{name} resolves from a path, so the manifest must patch it from vendor/git/{name}"
+        );
+    }
     package
 }
 
@@ -455,6 +461,12 @@ fn winit_carries_the_windows_11_monitor_scale_fix() {
     }
     let provenance = std::fs::read_to_string(root.join("vendor/winit/.cargo_vcs_info.json")).unwrap();
     assert!(provenance.contains("e9809ef54b18499bb4f2cac945719ecc2a61061b"), "vendor/winit keeps its upstream base provenance");
+    // The copy the app actually builds (vendor/git/winit) carries the same fix in storytold's form.
+    let built = std::fs::read_to_string(root.join("vendor/git/winit/src/platform_impl/windows/event_loop.rs")).unwrap();
+    assert!(
+        built.contains("let new_outer_rect: RECT = if !WIN10_BUILD_VERSION.is_some_and(|build| build < 22000) {\n                suggested_rect\n"),
+        "vendor/git/winit lost the Windows 11 monitor-scale fix"
+    );
 }
 
 const NVIDIA: (u32, u32) = (0x10de, 0x2684);
