@@ -13,13 +13,13 @@ pub enum ThemeKind {
     Dark,
 }
 
-/// The saved user choice, independent of the light/dark colours currently displayed. A fresh
-/// install follows the system (#1248); a desktop that says nothing gets Light.
+/// The saved user choice, independent of the light/dark colours currently displayed. Optimised PDF
+/// starts dark on a fresh install; Light and System (#1248) are kept once chosen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ThemePreference {
-    #[default]
     System,
     Light,
+    #[default]
     Dark,
 }
 

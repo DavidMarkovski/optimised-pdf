@@ -275,10 +275,6 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if icons::button(ui, "circle-help", button, false, tl!("Keyboard shortcuts")).clicked() {
                         app.dialog = Some(Dialog::Shortcuts);
                     }
-                    // One click to the community, from anywhere in the app.
-                    if widgets::ghost_button_sized(ui, "messages-square", "Discord", tab_h).on_hover_text(pdfcraft_engine::links::DISCORD).clicked() {
-                        app.execute("help.discord");
-                    }
                 });
             });
         });
@@ -582,7 +578,7 @@ fn tab(ui: &mut egui::Ui, spec: TabSpec<'_>, close: &mut Option<usize>) -> egui:
 
 /// Width the print, save and info buttons and their gaps take in the mode bar: three buttons, the
 /// 4 pt `item_spacing` after each of them (three gaps, not two), and the 8 pt spacer.
-const MODE_BAR_RIGHT: f32 = 3.0 * 32.0 + 3.0 * 4.0 + 8.0;
+const MODE_BAR_RIGHT: f32 = 32.0 + 4.0 + 8.0;
 /// Narrowest search field the mode bar shows; below it the field becomes an icon button.
 const MODE_BAR_SEARCH_MIN: f32 = 140.0;
 
@@ -606,6 +602,31 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 if hidden.toolbar {
                     return;
                 }
+                // Optimised PDF: Save, Save As and Print come first, labelled: the actions used most.
+                // Greyed out with no document open.
+                let has_doc = app.active.is_some();
+                ui.add_enabled_ui(has_doc, |ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
+                    if widgets::action_button(ui, "save", tl!("Save"), &tip).on_hover_text(&tip).clicked() {
+                        app.run_command("file.save");
+                    }
+                    let tip = crate::commands::command_tip(ui.ctx(), tl!("Save As ({key})"), "file.save_as");
+                    if widgets::action_button(ui, "file-output", tl!("Save As"), &tip).on_hover_text(&tip).clicked() {
+                        app.run_command("file.save_as");
+                    }
+                    let tip = crate::commands::command_tip(ui.ctx(), tl!("Print ({key})"), "print.dialog");
+                    // A document that forbids printing says so here, before the dialog (#2669).
+                    let may_print = !has_doc || pdfcraft_engine::commands::command("print.dialog").is_some_and(|c| app.command_enabled(c));
+                    let mut print = ui.add_enabled_ui(may_print, |ui| widgets::action_button(ui, "printer", tl!("Print"), &tip)).inner;
+                    print = if may_print { print.on_hover_text(&tip) } else { print.on_disabled_hover_text(crate::print_refused()) };
+                    if print.clicked() {
+                        app.run_command("print.dialog");
+                    }
+                });
+                ui.add_space(10.0);
+                ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
+                ui.add_space(10.0);
                 // Acrobat's mode bar has no Read tab: reading is what the viewer does with no tool
                 // in use. Read mode (the panes hidden) stays a View command and a default workspace.
                 let modes = [(Mode::AllTools, "All tools"), (Mode::Edit, "Edit"), (Mode::Convert, "Convert"), (Mode::Sign, "E-Sign")];
@@ -642,20 +663,6 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let has_doc = app.active.is_some();
                     ui.add_enabled_ui(has_doc, |ui| {
-                        let tip = crate::commands::command_tip(ui.ctx(), tl!("Print ({key})"), "print.dialog");
-                        // A document that forbids printing says so here, before the dialog (#2669).
-                        let may_print = !has_doc || pdfcraft_engine::commands::command("print.dialog").is_some_and(|c| app.command_enabled(c));
-                        let mut print = ui.add_enabled_ui(may_print, |ui| icons::button(ui, "printer", 32.0, false, &tip)).inner;
-                        if !may_print {
-                            print = print.on_disabled_hover_text(crate::print_refused());
-                        }
-                        if print.clicked() {
-                            app.run_command("print.dialog");
-                        }
-                        let tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
-                        if icons::button(ui, "save", 32.0, false, &tip).clicked() {
-                            app.run_command("file.save");
-                        }
                         let tip = crate::commands::command_tip(ui.ctx(), tl!("Document properties ({key})"), "file.properties");
                         if icons::button(ui, "info", 32.0, false, &tip).clicked() {
                             app.dialog = Some(Dialog::Properties(PropsTab::Description));

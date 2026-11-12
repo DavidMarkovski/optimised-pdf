@@ -47,7 +47,7 @@ pub const MAX_PIXELS: u32 = 64_000_000;
 
 #[derive(Debug, thiserror::Error)]
 pub enum OcrError {
-    #[error("the text recognition models are not installed (reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them)")]
+    #[error("the text recognition models are not installed (reinstall Optimised PDF, or set PDFCRAFT_MODELS to the folder that holds them)")]
     NoModels,
     #[error("loading {0}: {1}")]
     Load(String, String),

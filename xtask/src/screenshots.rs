@@ -114,7 +114,7 @@ fn update_attribution(root: &Path) -> Result<()> {
         let contents = if shows_ocr {
             "Shows only PdfCraft UI, its Lucide icons and a synthetic scanned page built from the embedded fonts, with a real recognition (the OCR models) loaded into the Verify screen"
         } else if shows_home {
-            "Shows PdfCraft UI, Lucide icons, the showcase PDF built from the [[fetched]] OFL fonts, and the ArtCraft mark (Storyteller trademark from docs/brand/, not covered by this licence)"
+            "Shows PdfCraft UI, Lucide icons, the showcase PDF built from the [[fetched]] OFL fonts"
         } else {
             "Shows only PdfCraft UI, Lucide icons and the showcase PDF built from the [[fetched]] OFL fonts"
         };

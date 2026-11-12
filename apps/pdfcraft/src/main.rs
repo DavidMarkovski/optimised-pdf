@@ -65,13 +65,13 @@ const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256
 const USAGE: &str = "\
 Usage: pdfcraft [options] [files…]
 
-Opens the files in the PdfCraft desktop app.
+Opens the files in the Optimised PDF desktop app.
 
 Options:
   --two-paged                 open command-line PDFs in noncontinuous two-page view
-  --new-window                open a window of its own instead of passing the files to a running PdfCraft
+  --new-window                open a window of its own instead of passing the files to a running Optimised PDF
   --create-images [images…]   put the images in one PDF and ask for the page DPI
-  --combine files…            add the files to the Combine files tab, of a running PdfCraft if there is one
+  --combine files…            add the files to the Combine files tab, of a running Optimised PDF if there is one
   --control <file>            enable the UI control channel (pdfcraft-cli ui --control <file> …)
   --page N, --zoom 150, --layout continuous, --theme dark, …
                               view settings applied once the files are open
@@ -246,7 +246,7 @@ fn main() -> eframe::Result {
         (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("PdfCraft")))
     {
         match logger.attach_dir(&dir.join("logs")) {
-            Ok(path) => log::info!("PdfCraft {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
+            Ok(path) => log::info!("Optimised PDF {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
             // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
             Err(e) => log::warn!("no log file: {e}"),
         }
@@ -334,7 +334,7 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
 /// The window and renderer settings for one run.
 fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("PdfCraft")
+        .with_title("Optimised PDF")
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size(pdfcraft_ui_egui::MIN_WINDOW_SIZE)
         .with_drag_and_drop(true)
@@ -550,7 +550,7 @@ fn app_creator<'a>(
 /// `unsafe` calls.
 fn notify_software_renderer(app: &mut PdfCraftApp, device_type: eframe::wgpu::DeviceType) {
     if device_type == eframe::wgpu::DeviceType::Cpu {
-        app.notify_tr("PdfCraft is drawing without a graphics processor, so it may be slow. Updating the graphics driver may help.");
+        app.notify_tr("Optimised PDF is drawing without a graphics processor, so it may be slow. Updating the graphics driver may help.");
     }
 }
 
