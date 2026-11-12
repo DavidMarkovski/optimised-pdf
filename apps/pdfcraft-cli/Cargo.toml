@@ -37,6 +37,7 @@ rustix = { version = "1", features = ["process"] }
 winresource = "0.1"
 
 [features]
-default = ["mcp"]
-# The opt-in MCP server (`pdfcraft-cli mcp`). Build with --no-default-features to leave it out.
+# Optimised PDF: no MCP server by default (offline app); build with --features mcp to add it.
+default = []
+# The opt-in MCP server (`pdfcraft-cli mcp`).
 mcp = ["pdfcraft-automation/mcp"]

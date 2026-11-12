@@ -17,8 +17,11 @@ PdfCraft v0.21.0 with these changes:
 
 - named **Optimised PDF**, with a red "PDF" app icon;
 - no ArtCraft branding, Discord, website or GitHub links;
-- no network access: no update checks or self-updating;
+- no network access: no update checks or self-updating, web addresses in page text are not
+  links, no MCP server or UI control channel;
 - dark mode by default, a simpler Home screen, and labelled Save, Save As and Print buttons;
+- "Print with Optimised PDF" in File Explorer's right-click menu (and the Print verb when it is
+  the default PDF app): it opens the file, shows the Print dialog and closes when done;
 - every save writes a clean copy of the file, so deleted or redacted content can't be recovered
   from earlier versions inside it;
 - English only.
@@ -34,8 +37,10 @@ On Windows with Rust installed:
 cargo build --release -p pdfcraft
 ```
 
-The app is `target/release/pdfcraft.exe` until the rename to `OptimisedPDF.exe` lands. Windows
-installers are built by the **Build installer** workflow in GitHub Actions.
+The app is `target/release/OptimisedPDF.exe`; its settings, logs and recovery files are under
+`%APPDATA%\OptimisedPDF` and `%LOCALAPPDATA%\OptimisedPDF`, apart from any PdfCraft installation.
+`OptimisedPDF.exe --print file.pdf` opens the file, shows the Print dialog and closes when done.
+Windows installers are built by the **Build installer** workflow in GitHub Actions.
 
 ## Licence
 

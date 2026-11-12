@@ -180,7 +180,74 @@ impl Drop for WakeOnExit {
     }
 }
 
+/// Optimised PDF: where a print-only launch (`OptimisedPDF.exe --print file.pdf`, File Explorer's
+/// Print) has got to. See [`PdfCraftApp::print_then_quit`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LaunchPrint {
+    /// An ordinary launch.
+    #[default]
+    Off,
+    /// The file named on the command line is still opening.
+    WaitingForDocument,
+    /// The Print dialog is open.
+    DialogOpen,
+    /// The dialog is closed: once nothing is left to spool or save, the app closes.
+    Finishing,
+}
+
 impl PdfCraftApp {
+    /// Optimised PDF: a print-only launch. Once the document named on the command line is open the
+    /// Print dialog shows; when it is closed (printed or cancelled) and the job has reached the
+    /// spooler (or Save as PDF has written its file), the app closes. If the file can't be opened,
+    /// the app stays open with the error, as an ordinary launch would.
+    pub fn print_then_quit(&mut self) {
+        self.launch_print = LaunchPrint::WaitingForDocument;
+    }
+
+    /// Where a print-only launch has got to ([`Self::print_then_quit`]).
+    pub fn launch_print(&self) -> LaunchPrint {
+        self.launch_print
+    }
+
+    /// Moves a print-only launch along (each frame).
+    pub(crate) fn poll_launch_print(&mut self) {
+        match self.launch_print {
+            LaunchPrint::Off => {}
+            LaunchPrint::WaitingForDocument => {
+                let opening = !self.pending_opens.is_empty() || !self.deferred_opens.is_empty() || self.password_prompt.is_some();
+                if opening {
+                    return;
+                }
+                if self.active_ids().is_none() {
+                    // Nothing opened: leave the app open with whatever it said.
+                    self.launch_print = LaunchPrint::Off;
+                    return;
+                }
+                self.open_print();
+                self.launch_print = if self.dialog == Some(crate::Dialog::Print) { LaunchPrint::DialogOpen } else { LaunchPrint::Off };
+            }
+            LaunchPrint::DialogOpen => {
+                if self.dialog != Some(crate::Dialog::Print) {
+                    self.launch_print = LaunchPrint::Finishing;
+                }
+            }
+            LaunchPrint::Finishing => {
+                // Still spooling, or Save as PDF still asking where.
+                #[cfg(not(target_arch = "wasm32"))]
+                let busy = !self.print_tasks.jobs.is_empty() || self.pickers.pending();
+                #[cfg(target_arch = "wasm32")]
+                let busy = false;
+                if busy || self.dialog.is_some() {
+                    return;
+                }
+                self.launch_print = LaunchPrint::Off;
+                if let Some(ctx) = self.ctx.clone() {
+                    self.request_quit(&ctx);
+                }
+            }
+        }
+    }
+
     /// Open the Print dialog, preselecting the default printer and reading papers in the background.
     pub fn open_print(&mut self) {
         let Some((i, _)) = self.active_ids() else { return };
@@ -1129,5 +1196,79 @@ mod tests {
         later.sheet = 2;
         let rasters = preview_rasters(&later, &sizes, &labels, 2.0, 8192.0);
         assert!(rasters.iter().any(|(page, _)| *page == 2));
+    }
+}
+
+/// Optimised PDF: a print-only launch (`--print`, File Explorer's Print).
+#[cfg(test)]
+mod launch_print_tests {
+    use super::LaunchPrint;
+    use crate::{Dialog, PdfCraftApp};
+    use egui_kittest::kittest::Queryable as _;
+
+    fn harness(print_launch: bool) -> egui_kittest::Harness<'static, PdfCraftApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            app.open_bytes("form.pdf", None, include_bytes!("../../tests/data/form.pdf").to_vec()).unwrap();
+            if print_launch {
+                app.print_then_quit();
+            }
+            app
+        });
+        h.run_steps(4);
+        h
+    }
+
+    #[test]
+    fn a_print_launch_shows_the_dialog_and_closes_the_app_when_it_is_done() {
+        let mut h = harness(true);
+        assert_eq!(h.state().dialog, Some(Dialog::Print), "the Print dialog shows by itself");
+        assert_eq!(h.state().launch_print(), LaunchPrint::DialogOpen);
+        assert!(!h.state().allow_quit);
+        h.get_by_label("Cancel").click();
+        h.run_steps(4);
+        assert_eq!(h.state().dialog, None);
+        assert_eq!(h.state().launch_print(), LaunchPrint::Off);
+        assert!(h.state().allow_quit, "the app closes once the dialog is done");
+    }
+
+    #[test]
+    fn saving_as_pdf_from_a_print_launch_writes_the_file_before_closing() {
+        let mut h = harness(true);
+        let out = std::env::temp_dir().join(format!("optimisedpdf-launch-print-{}.pdf", std::process::id()));
+        h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+        h.state_mut().print_draft.printer = None;
+        h.run_steps(1);
+        h.get_by_label("Save as PDF").click();
+        h.run_steps(4);
+        assert!(out.is_file(), "the PDF was written");
+        assert!(h.state().allow_quit, "then the app closes");
+        let _ = std::fs::remove_file(out);
+    }
+
+    #[test]
+    fn an_ordinary_launch_stays_open_after_printing() {
+        let mut h = harness(false);
+        assert_eq!(h.state().dialog, None, "no Print dialog by itself");
+        assert!(h.state_mut().execute("print.dialog"));
+        h.run_steps(3);
+        h.get_by_label("Cancel").click();
+        h.run_steps(4);
+        assert_eq!(h.state().launch_print(), LaunchPrint::Off);
+        assert!(!h.state().allow_quit);
+    }
+
+    #[test]
+    fn a_print_launch_whose_file_did_not_open_stays_open() {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).build_eframe(|_cc| {
+            let mut app = PdfCraftApp::new();
+            app.print_then_quit();
+            app
+        });
+        h.run_steps(4);
+        assert_eq!(h.state().launch_print(), LaunchPrint::Off);
+        assert_eq!(h.state().dialog, None);
+        assert!(!h.state().allow_quit);
     }
 }

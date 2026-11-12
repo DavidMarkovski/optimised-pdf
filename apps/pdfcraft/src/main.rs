@@ -63,7 +63,7 @@ const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256
 /// What `-h` / `--help` prints (#4076): a hint, not the full option list (that is this file's
 /// doc comment and the README). Scripts want `pdfcraft-cli`, which never opens a window.
 const USAGE: &str = "\
-Usage: pdfcraft [options] [files…]
+Usage: OptimisedPDF [options] [files…]
 
 Opens the files in the Optimised PDF desktop app.
 
@@ -72,7 +72,7 @@ Options:
   --new-window                open a window of its own instead of passing the files to a running Optimised PDF
   --create-images [images…]   put the images in one PDF and ask for the page DPI
   --combine files…            add the files to the Combine files tab, of a running Optimised PDF if there is one
-  --control <file>            enable the UI control channel (pdfcraft-cli ui --control <file> …)
+  --print file                open the file, show the Print dialog, and close when it is done
   --page N, --zoom 150, --layout continuous, --theme dark, …
                               view settings applied once the files are open
   -h, --help                  print this and exit
@@ -92,10 +92,10 @@ fn print_and_exit(text: &str) -> eframe::Result {
 const LEGACY_STORAGE_KEY: &str = "printcraft";
 
 /// The preferences folder (`app.ron`, docs/development.md). In portable mode
-/// it is `PdfCraftData` beside the executable (#157). XDG desktops use the configuration base;
+/// it is `OptimisedPDFData` beside the executable (#157). XDG desktops use the configuration base;
 /// other platforms retain eframe's PdfCraft folder. Logs and recovery stay in the data folder.
 fn settings_dir() -> Option<std::path::PathBuf> {
-    let legacy = eframe::storage_dir("PdfCraft");
+    let legacy = eframe::storage_dir(pdfcraft_ui_egui::STORAGE_NAME);
     match settings::directory(
         cfg!(all(unix, not(target_os = "macos"))),
         pdfcraft_ui_egui::portable::data_dir(),
@@ -201,11 +201,6 @@ fn rejoin_split_paths(args: Vec<String>, exists: impl Fn(&str) -> bool) -> Vec<S
 }
 
 fn main() -> eframe::Result {
-    // Windows: the update helper is a copy of this program started with `--finish-update`.
-    #[cfg(windows)]
-    if let Some(result) = craft_update::self_update::finish(&pdfcraft_ui_egui::UPDATE_APP, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
-        std::process::exit(i32::from(result.is_err()));
-    }
     // First, so the panic hook and every start-up warning are recorded (`logging`).
     let logger = logging::install();
     // Last-resort guard (AGENTS.md §4): commands, edits, opens and saves catch panics and report
@@ -222,19 +217,19 @@ fn main() -> eframe::Result {
             log::error!("{report}");
         } else {
             // `eprintln!` panics on a broken stderr pipe, and a panic inside the panic hook aborts.
-            let _ = std::io::Write::write_fmt(&mut std::io::stderr(), format_args!("pdfcraft: {report}\n"));
+            let _ = std::io::Write::write_fmt(&mut std::io::stderr(), format_args!("OptimisedPDF: {report}\n"));
         }
     }));
     let mut startup = startup::Arguments::parse(std::env::args().skip(1));
     if startup.version {
-        return print_and_exit(&format!("pdfcraft {}", pdfcraft_engine::build_info::version()));
+        return print_and_exit(&format!("OptimisedPDF {}", pdfcraft_engine::build_info::version()));
     }
     if startup.help {
         return print_and_exit(USAGE);
     }
     startup.files = rejoin_split_paths(startup.files, |p| std::path::Path::new(p).is_file());
     let may_hand_off = startup.may_hand_off();
-    let startup::Arguments { files, options, control_file, create_images, combine, two_paged, .. } = startup;
+    let startup::Arguments { files, options, control_file, create_images, combine, two_paged, print, .. } = startup;
     let integrated = cfg!(target_os = "macos");
     // GNOME on Wayland leaves the window frame to the app (src/decorations.rs).
     let window_controls = if cfg!(any(target_os = "macos", target_os = "windows")) { None } else { decorations::app_drawn() };
@@ -242,9 +237,10 @@ fn main() -> eframe::Result {
     // The log file stays in the data folder; opened after the arguments (so `--version` leaves
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
     // Records logged until now are written to it first.
-    if let (Some(logger), Some(dir)) =
-        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("PdfCraft")))
-    {
+    if let (Some(logger), Some(dir)) = (
+        logger,
+        pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir(pdfcraft_ui_egui::STORAGE_NAME)),
+    ) {
         match logger.attach_dir(&dir.join("logs")) {
             Ok(path) => log::info!("Optimised PDF {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
             // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
@@ -264,7 +260,7 @@ fn main() -> eframe::Result {
         single_instance::Claim::Alone => None,
     };
     let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
-    let launch = Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged };
+    let launch = Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged, print };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -273,7 +269,7 @@ fn main() -> eframe::Result {
     let started = Rc::new(Cell::new(false));
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
-        "PdfCraft",
+        pdfcraft_ui_egui::STORAGE_NAME,
         native_options(launch.integrated, launch.window_controls.is_some(), first),
         app_creator(
             launch.clone(),
@@ -291,7 +287,7 @@ fn main() -> eframe::Result {
             // usually still works there, so that's better than quitting.
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
-                "PdfCraft",
+                pdfcraft_ui_egui::STORAGE_NAME,
                 native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow),
                 app_creator(
                     launch,
@@ -385,6 +381,8 @@ struct Launch {
     /// The window buttons the app draws, when the desktop leaves the frame to it.
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
     two_paged: bool,
+    /// `--print`: print the files and close (Optimised PDF).
+    print: bool,
 }
 
 /// Whether the window is a native Wayland one (not X11 or XWayland).
@@ -447,7 +445,7 @@ fn app_creator<'a>(
     instance: Option<&'a single_instance::Server>,
     #[cfg(target_os = "macos")] apple_events: &'a apple_events::AppleEvents,
 ) -> eframe::AppCreator<'a> {
-    let Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged } = launch;
+    let Launch { files, options, control_file, create_images, combine, integrated, window_controls, two_paged, print } = launch;
     Box::new(move |cc| {
         started.set(true);
         let mut app = PdfCraftApp::new();
@@ -473,7 +471,6 @@ fn app_creator<'a>(
             }
             app.motion.source = Some(motion::source());
         }
-        app.set_startup_update_check(true);
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.two_sided_source = Some(pdfcraft_ui_egui::system_two_sided());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
@@ -528,6 +525,11 @@ fn app_creator<'a>(
         } else if combine {
             app.reopen_last_files(&[]);
             app.combine_paths(&files);
+        } else if print && !files.is_empty() {
+            // Optimised PDF (File Explorer's Print): just this file, never the last session, then
+            // the Print dialog, then close.
+            startup::open_files(&mut app, &files, false);
+            app.print_then_quit();
         } else {
             // With the preference on, last session's files come back first; files named on
             // the command line open after them, in front (#442).

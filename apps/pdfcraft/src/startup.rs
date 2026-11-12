@@ -11,13 +11,22 @@ pub(super) struct Arguments {
     pub combine: bool,
     pub new_window: bool,
     pub two_paged: bool,
+    /// Optimised PDF: `--print` (File Explorer's Print): open the file, show the Print dialog and
+    /// close once it is done. Always a window of its own.
+    pub print: bool,
     pub version: bool,
     pub help: bool,
 }
 
 impl Arguments {
     pub fn may_hand_off(&self) -> bool {
-        !self.new_window && !self.files.is_empty() && self.options.is_empty() && self.control_file.is_none() && !self.create_images && !self.two_paged
+        !self.new_window
+            && !self.files.is_empty()
+            && self.options.is_empty()
+            && self.control_file.is_none()
+            && !self.create_images
+            && !self.two_paged
+            && !self.print
     }
 
     pub fn parse(args: impl IntoIterator<Item = String>) -> Self {
@@ -33,7 +42,13 @@ impl Arguments {
                     parsed.help = true;
                     break;
                 }
-                "--control" => parsed.control_file = args.next(),
+                // Optimised PDF: the UI control channel (a loopback TCP port) is not offered. The
+                // file name after it is skipped, so it isn't opened as a document.
+                "--control" => {
+                    let _ = args.next();
+                    log::warn!("--control is not available in Optimised PDF");
+                }
+                "--print" => parsed.print = true,
                 "--create-images" => parsed.create_images = true,
                 // File Explorer's "Combine files in PdfCraft" (#585): the files go to the Combine
                 // files tab, of the running PdfCraft when there is one.
@@ -90,14 +105,24 @@ mod tests {
         let normal = parse(&["first.pdf", "second.pdf"]);
         assert!(!normal.two_paged);
         assert!(normal.may_hand_off());
-        for args in [
-            &["--new-window", "first.pdf"][..],
-            &["--layout", "two-page", "first.pdf"],
-            &["--control", "control.json", "first.pdf"],
-            &["--create-images", "first.png"],
-        ] {
+        for args in
+            [&["--new-window", "first.pdf"][..], &["--layout", "two-page", "first.pdf"], &["--print", "first.pdf"], &["--create-images", "first.png"]]
+        {
             assert!(!parse(args).may_hand_off());
         }
+    }
+
+    /// Optimised PDF: `--print` names the file to print; `--control` is ignored, file name and all.
+    #[test]
+    fn print_is_a_flag_and_control_is_ignored() {
+        let print = parse(&["--print", "first.pdf"]);
+        assert!(print.print);
+        assert_eq!(print.files, ["first.pdf"]);
+        assert!(print.options.is_empty());
+        let control = parse(&["--control", "control.json", "first.pdf"]);
+        assert!(control.control_file.is_none());
+        assert_eq!(control.files, ["first.pdf"]);
+        assert!(control.options.is_empty());
     }
 
     #[test]
