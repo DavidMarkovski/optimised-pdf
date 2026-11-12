@@ -777,7 +777,7 @@ impl PdfCraftApp {
                     && let Some(doc) = self.session.get(self.views[i].id)
                 {
                     let info = &doc.info;
-                    if let Some((page, quads)) = self.views[i].selection_quads(info) {
+                    if let Some((page, quads)) = self.views[i].selection_redaction_quads(info) {
                         self.views[i].clear_selection();
                         let author = self.comment_prefs.author.clone();
                         self.apply_edit(self.redact_prefs.mark(page, quads, &author));

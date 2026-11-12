@@ -42,6 +42,10 @@ impl TextFilter {
 
 mod search;
 
+/// The most boxes [`PageText::redaction_rects`] tries to join into rows: joining checks every
+/// pair against every glyph that stays, so a page-sized selection keeps its boxes as they are.
+pub const MAX_REDACTION_RECTS: usize = 512;
+
 /// Whether `(x, y)` lies in or on the convex quadrilateral `quad`, whichever way it winds. A
 /// quad with a NaN corner, or no area, holds nothing.
 fn quad_contains(quad: &[[f32; 2]; 4], x: f32, y: f32) -> bool {
@@ -290,6 +294,60 @@ impl PageText {
     /// the rectangle never covers text that is not selected.
     pub fn glyph_rects(&self, glyphs: &[usize]) -> Vec<[f32; 4]> {
         self.merged_rects(glyphs.iter().copied())
+    }
+
+    /// Optimised PDF: the boxes a redaction of `glyphs` (ascending glyph indices) draws: one per
+    /// visual row wherever that is safe. [`Self::glyph_rects`] gives one box per run of a line, and
+    /// a row of justified, kerned or table-like text can be many runs, so its redaction came out as
+    /// a box per word, showing how long each hidden word was. Here boxes that share a row (they
+    /// overlap by at least half the shorter one's height) are joined into one, unless the joined
+    /// box would also cover a glyph that is not being redacted. Large selections (more than
+    /// [`MAX_REDACTION_RECTS`] boxes) are left as they are.
+    pub fn redaction_rects(&self, glyphs: &[usize]) -> Vec<[f32; 4]> {
+        let mut rects = self.merged_rects(glyphs.iter().copied());
+        if rects.len() < 2 || rects.len() > MAX_REDACTION_RECTS {
+            return rects;
+        }
+        let selected: HashSet<usize> = glyphs.iter().copied().collect();
+        // Centres of the glyphs that stay, which no joined box may cover.
+        let kept: Vec<(f32, f32)> = self
+            .glyphs
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !selected.contains(i))
+            .map(|(_, g)| ((g.rect[0] + g.rect[2]) / 2.0, (g.rect[1] + g.rect[3]) / 2.0))
+            .collect();
+        let same_row = |a: &[f32; 4], b: &[f32; 4]| {
+            let overlap = a[3].min(b[3]) - a[1].max(b[1]);
+            let shorter = (a[3] - a[1]).min(b[3] - b[1]);
+            shorter > 0.0 && overlap >= shorter * 0.5
+        };
+        let covers_kept = |r: &[f32; 4]| kept.iter().any(|&(x, y)| x > r[0] && x < r[2] && y > r[1] && y < r[3]);
+        // Join until nothing more can be: each join removes a box, so this ends.
+        let mut joined = true;
+        while joined {
+            joined = false;
+            'outer: for i in 0..rects.len() {
+                for j in i + 1..rects.len() {
+                    let (Some(a), Some(b)) = (rects.get(i).copied(), rects.get(j).copied()) else { continue };
+                    if !same_row(&a, &b) {
+                        continue;
+                    }
+                    let mut both = a;
+                    union(&mut both, &b);
+                    if covers_kept(&both) {
+                        continue;
+                    }
+                    if let Some(slot) = rects.get_mut(i) {
+                        *slot = both;
+                    }
+                    rects.remove(j);
+                    joined = true;
+                    break 'outer;
+                }
+            }
+        }
+        rects
     }
 
     fn merged_rects(&self, glyphs: impl IntoIterator<Item = usize>) -> Vec<[f32; 4]> {

@@ -1831,8 +1831,13 @@ evidence = [
   "crates/ui-egui/tests/it/comments.rs::hotbar_picker_in_narrow_viewport_fits_within_screen_width",
   "crates/ui-egui/tests/it/comments.rs::hotbar_floating_picker_does_not_overlap_rendered_bar",
   "crates/ui-egui/tests/it/comments.rs::hotbar_settings_layout_and_side_controls_are_reachable_by_label",
+  "crates/ui-egui/src/toolbar.rs::every_category_tool_is_a_command_and_rotate_pages_is_offered",
+  "crates/ui-egui/src/toolbar.rs::pinning_moving_and_removing_tools",
+  "crates/ui-egui/src/toolbar.rs::the_toolbar_is_kept_in_the_settings_and_set_by_the_control_channel",
+  "crates/ui-egui/src/toolbar.rs::a_dropped_button_lands_past_the_centres_it_crossed",
+  "crates/ui-egui/tests/it/toolbar.rs::right_clicking_the_toolbar_pins_a_sub_tool_that_then_runs",
 ]
-notes = "Pin and unpin tools on the Home page via tool card hover button, All Tools row toggle, or 'Pin a tool' search dialog. Pinned tool order persists across sessions. Customizable document hotbar searches the command registry, adds/removes tools, resizes buttons from 24 to 64 pixels, floats or docks on any side with an optional full-side chrome strip, and persists preferences (UI control: hotbar-tools, hotbar-size, hotbar-side, hotbar-full-side). Missing: hotbar shortcut reordering and full Acrobat customization-dialog parity."
+notes = "Pin and unpin tools on the Home page via tool card hover button, All Tools row toggle, or 'Pin a tool' search dialog. Pinned tool order persists across sessions. Customizable document hotbar searches the command registry, adds/removes tools, resizes buttons from 24 to 64 pixels, floats or docks on any side with an optional full-side chrome strip, and persists preferences (UI control: hotbar-tools, hotbar-size, hotbar-side, hotbar-full-side). Optimised PDF: the toolbar (mode bar) holds pinned tools after Save, Save As and Print: right-click it (or its pin button) for the tool categories, hover one for all of its tools, click to pin or unpin; drag a pinned button to move it, right-click it to remove it; kept in the settings (UI control: toolbar-tools). Missing: hotbar shortcut reordering and full Acrobat customization-dialog parity."
 
 [[feature]]
 id = "view.restriction-notice"

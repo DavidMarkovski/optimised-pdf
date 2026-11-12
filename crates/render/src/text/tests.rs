@@ -2687,6 +2687,41 @@ fn a_column_selection_across_columns_reads_row_by_row() {
     assert_eq!(t.glyph_rects(&part), vec![[10.0, 24.0, 34.0, 34.0]]);
 }
 
+/// Optimised PDF: a redaction of a row draws one box for it, not one per piece of text, so the
+/// marks don't show how long each hidden word is; the boxes stay apart where joining them would
+/// cover text that is not being redacted.
+#[test]
+fn a_redacted_row_is_one_box_unless_that_would_cover_kept_text() {
+    let t = table();
+    let row = t.glyphs_in([0.0, 24.0, 200.0, 34.0]);
+    assert_eq!(t.column_text(&row), "Apple\t12");
+    assert_eq!(t.glyph_rects(&row).len(), 2, "two pieces of text on the row");
+    let boxes = t.redaction_rects(&row);
+    assert_eq!(boxes.len(), 1, "one box for the row: {boxes:?}");
+    let [x0, _, x1, _] = boxes[0];
+    assert!(x0 <= 10.0 && x1 >= 100.0, "the box spans the whole row: {boxes:?}");
+    // Rows stay apart: a box per row, not one over the whole table.
+    let all = t.glyphs_in([0.0, 0.0, 200.0, 60.0]);
+    assert_eq!(t.redaction_rects(&all).len(), 3, "one box per row");
+    // Nothing to join for one word.
+    let apple = t.glyphs_in([0.0, 24.0, 60.0, 34.0]);
+    assert_eq!(t.redaction_rects(&apple), t.glyph_rects(&apple));
+
+    let mut v = Vec::new();
+    word(&mut v, "Keep", 10.0, 10.0, 6.0);
+    word(&mut v, "this", 100.0, 10.0, 6.0);
+    word(&mut v, "safe", 190.0, 10.0, 6.0);
+    let t = layout(v);
+    let outer: Vec<usize> = [t.glyphs_in([0.0, 0.0, 60.0, 30.0]), t.glyphs_in([180.0, 0.0, 260.0, 30.0])].concat();
+    assert_eq!(t.column_text(&outer).replace('\t', " "), "Keep safe");
+    let boxes = t.redaction_rects(&outer);
+    assert_eq!(boxes.len(), 2, "joining them would cover \"this\", which is not redacted: {boxes:?}");
+    let this = t.glyphs_in([90.0, 0.0, 150.0, 30.0]);
+    for (x, y) in this.iter().filter_map(|&i| t.glyphs.get(i)).map(|g| ((g.rect[0] + g.rect[2]) / 2.0, (g.rect[1] + g.rect[3]) / 2.0)) {
+        assert!(!boxes.iter().any(|b| x > b[0] && x < b[2] && y > b[1] && y < b[3]), "a kept glyph is covered");
+    }
+}
+
 /// A rectangle that misses every glyph, or is not a number, selects nothing.
 #[test]
 fn an_empty_or_degenerate_column_selection_is_empty() {

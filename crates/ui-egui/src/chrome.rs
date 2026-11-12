@@ -602,6 +602,11 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 if hidden.toolbar {
                     return;
                 }
+                // Optimised PDF: a right-click anywhere on the toolbar past the menus offers the tool
+                // categories to pin from (`crate::toolbar`). Registered before the buttons, so they
+                // stay on top of it.
+                let rest = Rect::from_min_max(egui::pos2(ui.cursor().left(), ui.max_rect().top()), ui.max_rect().max);
+                let background = ui.interact(rest, ui.scope_id().with("toolbar-background"), egui::Sense::click());
                 // Optimised PDF: Save, Save As and Print come first, labelled: the actions used most.
                 // Greyed out with no document open.
                 let has_doc = app.active.is_some();
@@ -624,6 +629,11 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         app.run_command("print.dialog");
                     }
                 });
+                ui.add_space(10.0);
+                ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
+                ui.add_space(10.0);
+                // Optimised PDF: the user's pinned tools, then their pin button.
+                crate::toolbar::buttons(app, ui);
                 ui.add_space(10.0);
                 ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
                 ui.add_space(10.0);
@@ -680,6 +690,7 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         app.palette_open = true;
                     }
                 });
+                background.context_menu(|ui| crate::toolbar::pin_menu(app, ui));
             });
         });
 }

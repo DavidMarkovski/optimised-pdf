@@ -272,7 +272,7 @@ pub(crate) fn after_text(resp: &egui::Response, page: usize, info: &DocInfo, vie
     if !(resp.drag_stopped_by(egui::PointerButton::Primary) || resp.double_clicked()) || view.redact_drag.is_some() {
         return;
     }
-    if let Some((p, quads)) = view.selection_quads(info).filter(|(p, _)| *p == page) {
+    if let Some((p, quads)) = view.selection_redaction_quads(info).filter(|(p, _)| *p == page) {
         view.clear_selection();
         view.pending_redaction = Some((p, quads));
     }
@@ -315,7 +315,8 @@ impl PdfCraftApp {
                 _ => needles.iter().flat_map(|w| text.find_opts(w, d.case_sensitive, d.whole_words)).collect(),
             };
             for h in hits {
-                let quads: Vec<[f64; 8]> = text.line_rects(h).into_iter().map(|r| page_info.view_rect_to_quad(r)).collect();
+                // One box per visual row where safe (Optimised PDF): see `PageText::redaction_rects`.
+                let quads: Vec<[f64; 8]> = text.redaction_rects(&h.collect::<Vec<_>>()).into_iter().map(|r| page_info.view_rect_to_quad(r)).collect();
                 if !quads.is_empty() {
                     edits.push(self.redact_prefs.mark(page, quads, &author));
                 }

@@ -152,7 +152,9 @@ impl Automation {
                         .collect(),
                 };
                 for (word, h) in hits {
-                    let quads: Vec<[f64; 8]> = text.line_rects(h).into_iter().map(|r| info.pages[p].view_rect_to_quad(r)).collect();
+                    // One box per visual row where safe (Optimised PDF): see `PageText::redaction_rects`.
+                    let quads: Vec<[f64; 8]> =
+                        text.redaction_rects(&h.collect::<Vec<_>>()).into_iter().map(|r| info.pages[p].view_rect_to_quad(r)).collect();
                     if !quads.is_empty() {
                         marks.push((p, quads));
                         if let Some(m) = word.and_then(|i| matched_words.get_mut(i)) {
