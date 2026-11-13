@@ -637,8 +637,7 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
 pub fn action_button(ui: &mut egui::Ui, icon: &str, label: &str, name: &str) -> Response {
     let t = Tokens::get(ui.ctx());
     let font = theme::medium(13.5);
-    let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w + 52.0, 36.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(action_button_width(ui, label), 36.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), name));
     let enabled = ui.is_enabled();
     let (fill, ink) = if !enabled {
@@ -651,7 +650,13 @@ pub fn action_button(ui: &mut egui::Ui, icon: &str, label: &str, name: &str) -> 
     ui.painter().rect(rect, CornerRadius::same(18), fill, Stroke::new(1.2, if enabled { t.text_muted } else { t.border }), egui::StrokeKind::Inside);
     crate::icons::paint(ui, Rect::from_min_size(rect.min + vec2(13.0, 9.0), vec2(18.0, 18.0)), icon, 18.0, ink);
     ui.painter().text(rect.left_center() + vec2(38.0, 0.0), Align2::LEFT_CENTER, label, font, ink);
-    resp
+    theme::hand(resp)
+}
+
+/// Width [`action_button`] takes for `label`.
+pub fn action_button_width(ui: &egui::Ui, label: &str) -> f32 {
+    let t = Tokens::get(ui.ctx());
+    ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), theme::medium(13.5), t.text).size().x) + 52.0
 }
 
 /// Optimised PDF's app icon (the red "PDF" tile), `size` points square.

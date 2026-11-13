@@ -1215,7 +1215,7 @@ fn tab_and_window_show_the_document_title_when_asked() {
     use pdfcraft_engine::Edit;
     let mut h = harness();
     h.run_steps(2);
-    assert_eq!(h.state().window_title, "b.pdf — PdfCraft");
+    assert_eq!(h.state().window_title, "b.pdf — Optimised PDF");
     {
         let s = h.state_mut();
         let id = s.views[s.active.unwrap()].id;
@@ -1226,7 +1226,7 @@ fn tab_and_window_show_the_document_title_when_asked() {
     }
     h.run_steps(2);
     // The edits are unsaved, so the title says so (#3640).
-    assert_eq!(h.state().window_title, "Quarterly report • — PdfCraft");
+    assert_eq!(h.state().window_title, "Quarterly report • — Optimised PDF");
     h.get_by_label_contains("Quarterly report");
 }
 
@@ -1235,14 +1235,14 @@ fn the_window_title_marks_unsaved_changes_until_saved() {
     use pdfcraft_engine::Edit;
     let mut h = harness();
     h.run_steps(2);
-    assert_eq!(h.state().window_title, "b.pdf — PdfCraft");
+    assert_eq!(h.state().window_title, "b.pdf — Optimised PDF");
     {
         let s = h.state_mut();
         let id = s.views[s.active.unwrap()].id;
         s.session.apply(id, Edit::SetInfo { key: "Subject".into(), value: "Budget".into() }).unwrap();
     }
     h.run_steps(2);
-    assert_eq!(h.state().window_title, "b.pdf • — PdfCraft", "unsaved changes (#3640)");
+    assert_eq!(h.state().window_title, "b.pdf • — Optimised PDF", "unsaved changes (#3640)");
     // Removed on drop, so a failing assert below doesn't leave it behind.
     struct Dir(std::path::PathBuf);
     impl Drop for Dir {
@@ -1258,7 +1258,7 @@ fn the_window_title_marks_unsaved_changes_until_saved() {
     h.run_steps(2);
     let s = h.state();
     assert!(!s.session.get(s.views[s.active.unwrap()].id).unwrap().dirty);
-    assert_eq!(s.window_title, "b.pdf — PdfCraft", "saved");
+    assert_eq!(s.window_title, "b.pdf — Optimised PDF", "saved");
 }
 
 /// #3640: text typed but not yet applied is unsaved work too, as closing the tab says, so the
@@ -1268,7 +1268,7 @@ fn the_window_title_marks_a_draft_that_is_not_applied_yet() {
     use pdfcraft_ui_egui::fill_sign::TypeBox;
     let mut h = harness();
     h.run_steps(2);
-    assert_eq!(h.state().window_title, "b.pdf — PdfCraft");
+    assert_eq!(h.state().window_title, "b.pdf — Optimised PDF");
     let i = h.state().active.unwrap();
     h.state_mut().views[i].fill_text = Some(TypeBox {
         page: 0,
@@ -1282,8 +1282,8 @@ fn the_window_title_marks_a_draft_that_is_not_applied_yet() {
     h.run_steps(2);
     let s = h.state();
     assert!(!s.session.get(s.views[i].id).unwrap().dirty, "nothing applied to the document yet");
-    assert_eq!(s.window_title, "b.pdf • — PdfCraft");
-    assert_eq!(s.page_title, "b.pdf • — PdfCraft");
+    assert_eq!(s.window_title, "b.pdf • — Optimised PDF");
+    assert_eq!(s.page_title, "b.pdf • — Optimised PDF");
 }
 
 /// #3640: a document that arrives while the window or browser tab is hidden, when eframe runs
@@ -1307,8 +1307,8 @@ fn a_document_opened_while_hidden_names_the_titles() {
     }
     let s = h.state();
     assert_eq!(s.views.len(), before + 1, "the document opened in logic");
-    assert_eq!(s.page_title, "arrived.pdf — PdfCraft");
-    assert_eq!(s.window_title, "arrived.pdf — PdfCraft");
+    assert_eq!(s.page_title, "arrived.pdf — Optimised PDF");
+    assert_eq!(s.window_title, "arrived.pdf — Optimised PDF");
 }
 
 /// #3640: a document that asks to show its own title shows it in the window, but the web page's
@@ -1326,8 +1326,8 @@ fn the_web_page_title_names_the_file_when_the_document_shows_its_title() {
         s.session.apply(id, Edit::SetInitialView(Box::new(v))).unwrap();
     }
     h.run_steps(2);
-    assert_eq!(h.state().window_title, "Budget 2026 • — PdfCraft");
-    assert_eq!(h.state().page_title, "b.pdf • — PdfCraft");
+    assert_eq!(h.state().window_title, "Budget 2026 • — Optimised PDF");
+    assert_eq!(h.state().page_title, "b.pdf • — Optimised PDF");
 }
 
 #[test]
@@ -1345,20 +1345,38 @@ fn a_placeholder_title_leaves_the_file_name_on_the_tab_and_window() {
         s.session.apply(id, Edit::SetInitialView(Box::new(v))).unwrap();
     }
     h.run_steps(2);
-    assert_eq!(h.state().window_title, "b.pdf • — PdfCraft");
+    assert_eq!(h.state().window_title, "b.pdf • — Optimised PDF");
     assert!(h.query_by_label_contains("about:blank").is_none());
+}
+
+/// `bytes` with an incremental update appended that sets the Title, as another application's
+/// save adds one. Optimised PDF's own Save writes a changed, unsigned document in full, as one
+/// revision, so a file with earlier revisions to view has to come from elsewhere.
+fn with_title_update(bytes: &[u8], title: &str) -> Vec<u8> {
+    use pdfcraft_cos::{Dict, Document, Object, PdfString};
+    let mut doc = Document::open(std::sync::Arc::new(bytes.to_vec())).unwrap();
+    let title = Object::String(PdfString::text(title));
+    match doc.trailer().get(b"Info").cloned() {
+        Some(Object::Ref(r)) if doc.get(r).as_dict().is_some() => doc.update_dict(r, |d| d.set(b"Title".to_vec(), title)).unwrap(),
+        _ => {
+            let mut info = Dict::new();
+            info.set(b"Title".to_vec(), title);
+            let r = doc.add(info);
+            doc.trailer_mut().set(b"Info".to_vec(), Object::Ref(r));
+        }
+    }
+    pdfcraft_cos::write_incremental(&doc, &Default::default()).unwrap()
 }
 
 #[test]
 fn an_earlier_revision_opens_from_document_properties() {
-    use pdfcraft_engine::Edit;
     let mut h = harness();
     {
         let s = h.state_mut();
         let id = s.views[s.active.unwrap()].id;
-        s.session.apply(id, Edit::SetInfo { key: "Title".into(), value: "Second".into() }).unwrap();
+        // Unchanged, so the file as opened.
         let bytes = s.session.save_bytes(id).unwrap();
-        s.open_bytes("updated.pdf", None, bytes.to_vec()).unwrap();
+        s.open_bytes("updated.pdf", None, with_title_update(&bytes, "Second")).unwrap();
     }
     h.run_steps(2);
     h.state_mut().dialog = Some(Dialog::Properties(pdfcraft_ui_egui::PropsTab::Advanced));
@@ -1420,14 +1438,10 @@ fn an_earlier_revision_opens_from_document_properties() {
 
 #[test]
 fn wrapped_revision_buttons_stay_above_binding_and_open_the_saved_revision() {
-    use pdfcraft_engine::{Edit, Session};
-    let mut bytes = std::sync::Arc::new(fixture(1));
-    // Reopen each save so the next edit appends to the preceding saved revision.
+    let mut bytes = fixture(1);
+    // Each update appends to the preceding saved revision.
     for revision in 2..=13 {
-        let mut source = Session::new().with_clock(|| 1_700_000_000);
-        let id = source.open("revisions.pdf", None, bytes, None).unwrap();
-        source.apply(id, Edit::SetInfo { key: "Title".into(), value: format!("Revision {revision}") }).unwrap();
-        bytes = source.save_bytes(id).unwrap();
+        bytes = with_title_update(&bytes, &format!("Revision {revision}"));
     }
     for width in [1400.0, 720.0] {
         let pdf = bytes.clone();
@@ -2754,7 +2768,7 @@ fn the_accessible_window_has_the_window_title_as_its_name() {
     let mut h = harness();
     h.run_steps(2);
     let name = |h: &Harness<'static, PdfCraftApp>| h.root().accesskit_node().label().map(|l| l.to_string());
-    assert_eq!(name(&h).as_deref(), Some("b.pdf — PdfCraft"));
+    assert_eq!(name(&h).as_deref(), Some("b.pdf — Optimised PDF"));
     {
         use pdfcraft_engine::Edit;
         let s = h.state_mut();
@@ -2766,6 +2780,6 @@ fn the_accessible_window_has_the_window_title_as_its_name() {
     }
     h.run_steps(2);
     // Unsaved, so it carries the window title's mark too (#3640).
-    assert_eq!(name(&h).as_deref(), Some("Quarterly report • — PdfCraft"));
+    assert_eq!(name(&h).as_deref(), Some("Quarterly report • — Optimised PDF"));
     assert_eq!(name(&h), Some(h.state().window_title.clone()));
 }

@@ -10108,24 +10108,14 @@ fn mode_tab(h: &Harness<'static, PdfCraftApp>, label: &str) -> egui::Rect {
     h.get_all_by_role_and_label(Role::Button, label).map(|n| n.rect()).find(|r| r.bottom() < 120.0).expect("a mode tab")
 }
 
-/// The cursor over each mode bar tab that page 1's text lies under, once that text is scrolled
-/// up under the bar. With the All tools panel closed it lies under Edit, Convert and E-Sign; it
-/// starts right of All tools.
-fn mode_tab_cursors(h: &mut Harness<'static, PdfCraftApp>, text: egui::Rect) -> [(&'static str, egui::CursorIcon); 3] {
+/// The cursor over each mode bar button that page 1's text lies under, once that text is
+/// scrolled up under the bar (`support::mode_bar_cursors`).
+fn mode_tab_cursors(h: &mut Harness<'static, PdfCraftApp>, text: egui::Rect) -> Vec<(String, egui::CursorIcon)> {
     h.state_mut().views[0].goto = Some((0, 0.5));
     h.run_steps(4);
     let offset = h.state().views[0].page_screen_rect(0).expect("on screen").top();
-    ["Edit", "Convert", "E-Sign"].map(|label| {
-        let at = mode_tab(h, label).center();
-        assert!(text.translate(egui::vec2(0.0, offset)).contains(at), "the text lies under {label}");
-        h.hover_at(at);
-        h.run_steps(2);
-        (label, h.output().platform_output.cursor_icon)
-    })
+    crate::support::mode_bar_cursors(h, text.translate(egui::vec2(0.0, offset)))
 }
-
-const HAND_ON_EVERY_TAB: [(&str, egui::CursorIcon); 3] =
-    [("Edit", egui::CursorIcon::PointingHand), ("Convert", egui::CursorIcon::PointingHand), ("E-Sign", egui::CursorIcon::PointingHand)];
 
 /// Page 1's text block on screen, relative to the page's top edge, in the window as it is now.
 fn page_text(h: &Harness<'static, PdfCraftApp>) -> egui::Rect {
@@ -10155,7 +10145,7 @@ fn mode_tabs_keep_the_hand_over_page_text_scrolled_under_them() {
         cursor == egui::CursorIcon::Text
     });
     assert!(text_cursor, "the I-beam over page text, not {cursor:?}");
-    assert_eq!(mode_tab_cursors(&mut h, text), HAND_ON_EVERY_TAB);
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, text), "page text under the tabs");
 }
 
 /// Edit text, then the All tools panel closed, as reported (#2755): a paragraph scrolled up
@@ -10168,14 +10158,14 @@ fn mode_tabs_keep_the_hand_over_a_paragraph_scrolled_under_them() {
     h.state_mut().set_option("left", "closed").unwrap();
     h.run_steps(4);
     let text = page_text(&h);
-    assert_eq!(mode_tab_cursors(&mut h, text), HAND_ON_EVERY_TAB, "a closed paragraph under the tabs");
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, text), "a closed paragraph under the tabs");
     // Open it, where it shows.
     h.state_mut().views[0].goto = Some((0, 0.3));
     h.run_steps(4);
     let top = h.state().views[0].page_screen_rect(0).expect("on screen").top();
     click_at(&mut h, text.center() + egui::vec2(0.0, top));
     assert!(h.state().views[0].line_editor.is_some());
-    assert_eq!(mode_tab_cursors(&mut h, text), HAND_ON_EVERY_TAB, "the open paragraph under the tabs");
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, text), "the open paragraph under the tabs");
     // Nor does the editor's frame, with the paragraph's top edge just under a tab (the frame
     // reaches 2 to 6 points outside it).
     let convert = mode_tab(&h, "Convert").center();

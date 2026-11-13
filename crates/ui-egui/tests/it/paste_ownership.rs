@@ -108,10 +108,13 @@ fn check_placement(rotation: u16, cropped: bool, view_rotation: u16, shared: boo
     assert!(!originals.contains(&inserted), "embedding must allocate a fresh image identity");
     let selected = &doc.page_images(0)[h.state().views[0].image_selection.as_ref().unwrap().index];
     assert_eq!(selected.object, Some(inserted), "the visible selection must name the inserted XObject");
+    // Optimised PDF's Save rewrites the file in full, which may renumber its objects: the saved
+    // image is found by its resource name, which the rewrite keeps.
+    let inserted_name = selected.name.clone();
     let center = [(selected.rect[0] + selected.rect[2]) * 0.5, (selected.rect[1] + selected.rect[3]) * 0.5];
     assert!((center[0] - at[0]).abs() < 0.001 && (center[1] - at[1]).abs() < 0.001, "rotation={rotation}, crop={cropped}: {center:?} vs {at:?}");
     let saved = reopened(h.state_mut());
-    let placed = saved.session.get(saved.views[0].id).unwrap().page_images(0).into_iter().find(|image| image.object == Some(inserted)).unwrap();
+    let placed = saved.session.get(saved.views[0].id).unwrap().page_images(0).into_iter().find(|image| image.name == inserted_name).unwrap();
     assert!(((placed.rect[0] + placed.rect[2]) * 0.5 - at[0]).abs() < 0.001);
     assert!(((placed.rect[1] + placed.rect[3]) * 0.5 - at[1]).abs() < 0.001);
     h.key_press(Key::Delete);

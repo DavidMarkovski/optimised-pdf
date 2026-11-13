@@ -745,10 +745,14 @@ fn button_label_is_editable_without_renaming_the_field() {
 
     let app = h.state();
     let id = app.views[0].id;
-    let field = app.session.get(id).unwrap().form.iter().find(|f| f.name == "clear_button").unwrap();
     let bytes = app.session.save_bytes(id).unwrap();
+    // Optimised PDF's Save rewrites the file in full, which may renumber its objects: the widget
+    // is found in the saved file by its field's name.
+    let mut saved = pdfcraft_engine::Session::new();
+    let saved_id = saved.open("saved.pdf", None, bytes.clone(), None).unwrap();
+    let obj = saved.get(saved_id).unwrap().form.iter().find(|f| f.name == "clear_button").unwrap().widgets[0].obj;
     let doc = pdfcraft_cos::Document::open(bytes).unwrap();
-    let widget = doc.get(field.widgets[0].obj);
+    let widget = doc.get(obj);
     let mk = doc.resolve(widget.as_dict().unwrap().get(b"MK").unwrap());
     assert_eq!(doc.resolve(mk.as_dict().unwrap().get(b"CA").unwrap()).as_string().unwrap().to_text(), "Clear Form");
     assert_eq!(app.session.get(id).unwrap().can_undo(), Some("Change field properties"));

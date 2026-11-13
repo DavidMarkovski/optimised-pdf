@@ -2496,11 +2496,11 @@ fn mode_tab(h: &Harness<'static, PdfCraftApp>, label: &str) -> egui::Rect {
 }
 
 /// Scroll the page until `what` (on screen) lies across the mode bar, then the cursor over each
-/// tab it lies under: with the All tools panel closed, every tab: All tools, Edit, Convert and E-Sign.
+/// mode bar button it lies under (`support::mode_bar_cursors`).
 fn mode_tab_cursors(
     h: &mut Harness<'static, PdfCraftApp>,
     what: impl Fn(&Harness<'static, PdfCraftApp>) -> egui::Rect,
-) -> [(&'static str, egui::CursorIcon); 4] {
+) -> Vec<(String, egui::CursorIcon)> {
     let page = |h: &Harness<'static, PdfCraftApp>| h.state().views[0].page_screen_rect(0).expect("on screen");
     let y = what(h).center().y - page(h).top();
     let tabs = mode_tab(h, "Convert").center().y;
@@ -2510,21 +2510,8 @@ fn mode_tab_cursors(
     h.state_mut().views[0].goto = Some((0, (top - (tabs - y)) / page(h).height()));
     h.run_steps(4);
     let under = what(h);
-    ["All tools", "Edit", "Convert", "E-Sign"].map(|label| {
-        let at = mode_tab(h, label).center();
-        assert!(under.contains(at), "{under:?} lies under {label} at {at:?}");
-        h.hover_at(at);
-        h.run_steps(2);
-        (label, h.output().platform_output.cursor_icon)
-    })
+    crate::support::mode_bar_cursors(h, under)
 }
-
-const HAND_ON_EVERY_TAB: [(&str, egui::CursorIcon); 4] = [
-    ("All tools", egui::CursorIcon::PointingHand),
-    ("Edit", egui::CursorIcon::PointingHand),
-    ("Convert", egui::CursorIcon::PointingHand),
-    ("E-Sign", egui::CursorIcon::PointingHand),
-];
 
 /// The Fill & Sign text box scrolled up under the mode bar leaves its tabs the hand (#2755): it
 /// floated over them, gave them its I-beam and took their clicks.
@@ -2540,7 +2527,7 @@ fn mode_tabs_keep_the_hand_over_a_type_box_scrolled_under_them() {
     click(&mut h, 10.0, 360.0);
     h.event(egui::Event::Text("Ada Lovelace, Countess of Lovelace".into()));
     h.run_steps(3);
-    assert_eq!(mode_tab_cursors(&mut h, type_box_rect), HAND_ON_EVERY_TAB);
+    crate::support::assert_hand_over_bar(&mode_tab_cursors(&mut h, type_box_rect), "the type box under the tabs");
     let convert = mode_tab(&h, "Convert").center();
     h.hover_at(convert);
     h.run_steps(1);
