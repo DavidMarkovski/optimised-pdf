@@ -6938,6 +6938,32 @@ fn javascript_invalid_field_colour_array_is_refused_without_partial_changes() {
     assert_eq!(s.save_bytes(id).unwrap(), before, "a refused script changes nothing");
 }
 
+/// A script recolouring a field that has a Format script draws it through the script again. The
+/// ATO forms' focus and blur scripts recolour their TFN and ABN combs on every visit; drawn from
+/// the look alone they showed the stored digits, each shifted into the comb's spacer cells.
+#[test]
+fn a_script_recolouring_a_formatted_field_keeps_it_formatted() {
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("order.pdf", None, Arc::new(scripted_form()), None).unwrap();
+    s.apply(id, Edit::SetFieldScript { name: "price".into(), event: "format".into(), script: Some("event.value = '#' + event.value + '#';".into()) })
+        .unwrap();
+    s.apply(id, Edit::SetFieldValue { name: "price".into(), value: FieldValue::Text("12".into()) }).unwrap();
+    let shown = |s: &Session| {
+        let doc = pdfcraft_cos::Document::open(s.save_bytes(id).unwrap()).unwrap();
+        let f = pdfcraft_forms::fields(&doc).into_iter().find(|f| f.name == "price").unwrap();
+        normal_appearance(&doc, f.widgets[0].obj.num)
+    };
+    assert!(shown(&s).contains("#12#"), "{}", shown(&s));
+    for script in
+        ["getField('price').fillColor = color.transparent;", "getField('price').strokeColor = color.black;", "getField('price').textSize = 9;"]
+    {
+        let out = s.run_javascript(id, script, None).unwrap();
+        assert_eq!(out.error, None, "{script}");
+        let after = shown(&s);
+        assert!(after.contains("#12#"), "{script}: {after}");
+    }
+}
+
 #[test]
 fn javascript_field_colours_respect_document_fill_permissions() {
     let mut plain = pdfcraft_cos::Document::open(Arc::new(scripted_form())).unwrap();

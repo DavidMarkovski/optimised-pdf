@@ -367,16 +367,16 @@ pub(crate) fn apply_changes(
             ..Default::default()
         };
         if appearance != crate::LookPatch::default() || c.text_size.is_some() || c.user_name.is_some() {
-            crate::author::set_props_object(
+            set_look_formatted(
                 doc,
-                &c.name,
-                f.obj,
+                f,
                 &crate::FieldProps {
                     appearance: (appearance != crate::LookPatch::default()).then_some(appearance),
                     font_size: c.text_size,
                     tooltip: c.user_name.clone(),
                     ..Default::default()
                 },
+                scripts,
             )?;
         }
         if let Some(rect) = c.rect {
@@ -385,7 +385,7 @@ pub(crate) fn apply_changes(
             }
             let widget = f.widgets.first().ok_or_else(|| FormError::Invalid("field has no widget rectangle".into()))?;
             doc.update_dict(widget.obj, |d| d.set(b"Rect".to_vec(), Object::Array(rect.into_iter().map(Object::Real).collect())))?;
-            crate::author::redraw_field_object(doc, &c.name, f.obj)?;
+            redraw_formatted(doc, f, scripts)?;
         }
         if let Some(icon) = c.icon {
             if f.kind != FieldKind::PushButton {
@@ -430,6 +430,34 @@ pub(crate) fn apply_changes(
         }
     }
     Ok(())
+}
+
+/// Give field `f` a script's new look (`props`), drawn as [`redraw_formatted`] draws it.
+fn set_look_formatted(doc: &mut Document, f: &Field, props: &crate::FieldProps, scripts: &mut dyn Scripts) -> Result<(), FormError> {
+    crate::author::set_props_object(doc, &f.name, f.obj, props)?;
+    redraw_through_format(doc, f, scripts)
+}
+
+/// Draw field `f` again (after a script moved it), through its Format script.
+fn redraw_formatted(doc: &mut Document, f: &Field, scripts: &mut dyn Scripts) -> Result<(), FormError> {
+    crate::author::redraw_field_object(doc, &f.name, f.obj)?;
+    redraw_through_format(doc, f, scripts)
+}
+
+/// Draw field `f` again through its Format script, after it was drawn from its look alone, which
+/// draws the stored value as is. A field with a Format script shows its value through it (an ATO
+/// form spaces a TFN out to the cells of its comb, "123 456 782"); drawn again for a new colour
+/// or size alone it showed "123456782", every digit a cell early, as the ATO forms' focus and
+/// blur scripts recolour it on every visit. Nothing to do without a Format script or a value.
+fn redraw_through_format(doc: &mut Document, f: &Field, scripts: &mut dyn Scripts) -> Result<(), FormError> {
+    if f.actions.scripts.format.is_none() || !matches!(f.kind, FieldKind::Text | FieldKind::Combo) {
+        return Ok(());
+    }
+    let Some(now) = fields(doc).into_iter().find(|x| x.obj == f.obj) else { return Ok(()) };
+    if now.value.is_empty() {
+        return Ok(());
+    }
+    crate::redraw_calculated_value(doc, &now, &now.value, scripts)
 }
 
 /// An Acrobat colour array as the RGB the look model stores, `None` for transparent (`["T"]`).

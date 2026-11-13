@@ -19,6 +19,24 @@ fn form() -> Vec<u8> {
         "<< /Type /Annot /Subtype /Widget /FT /Tx /T (note) /V (struck) /Rect [60 300 280 330] /P 3 0 R /F 6 >>",
         "<< /Type /XObject /Subtype /Form /BBox [0 0 30 30] /Length 0 >>\nstream\n\nendstream",
     ];
+    pdf(&objs)
+}
+
+/// `tfn` recolours itself as the ATO forms' TFN box does: white on focus, transparent from its
+/// Mouse Up script, which also logs that it ran.
+fn recolouring_form() -> Vec<u8> {
+    pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 6 0 R >> >> >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R 5 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (log) /V () /Rect [20 350 280 370] /P 3 0 R /F 4 >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (tfn) /V () /MaxLen 11 /Rect [20 250 280 290] /P 3 0 R /F 4 /A << /S /JavaScript /JS (event.target.fillColor = color.transparent; getField\\('log'\\).value += 'up;';) >> /AA << /Fo << /S /JavaScript /JS (event.target.fillColor = color.white;) >> >> >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    ])
+}
+
+/// A PDF of `objs`, numbered from 1 in order.
+fn pdf(objs: &[&str]) -> Vec<u8> {
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offsets = Vec::new();
     for (i, o) in objs.iter().enumerate() {
@@ -35,11 +53,15 @@ fn form() -> Vec<u8> {
 }
 
 fn harness() -> Harness<'static, PdfCraftApp> {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+    harness_with(form())
+}
+
+fn harness_with(bytes: Vec<u8>) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.set_option("left", "closed").unwrap();
-        app.open_bytes("triggers.pdf", None, form()).unwrap();
+        app.open_bytes("triggers.pdf", None, bytes).unwrap();
         app
     });
     crate::support::settle(&mut h);
@@ -101,4 +123,28 @@ fn a_check_box_mouse_up_script_sees_the_value_its_click_stored() {
     click(&mut h);
     crate::support::wait_until(&mut h, "unchecked and its Mouse Up ran", |app| field(app, "log").value.join(",") == "up:Yes;up:Off;");
     assert!(field(h.state(), "note").widgets[0].hidden, "hidden again");
+}
+
+/// One click opens a text field whose Mouse Up script recolours it (the ATO forms' TFN and ABN
+/// boxes), and it stays open to type into while the script runs. Running the script closed the
+/// editor the press had opened, so such a box took several quick clicks.
+#[test]
+fn one_click_opens_a_text_field_whose_mouse_up_script_recolours_it() {
+    let mut h = harness_with(recolouring_form());
+    let tfn = centre(&h, "tfn");
+    h.hover_at(tfn);
+    h.run_steps(1);
+    h.drag_at(tfn);
+    h.run_steps(1);
+    h.drop_at(tfn);
+    crate::support::wait_until(&mut h, "its Mouse Up ran", |app| field(app, "log").value.join(",") == "up;");
+    h.run_steps(4);
+    let editing = |h: &Harness<'static, PdfCraftApp>| h.state().views[0].forms.focus.as_ref().map(|f| f.name.clone());
+    assert_eq!(editing(&h).as_deref(), Some("tfn"), "the editor stays open");
+    h.event(egui::Event::Text("123456782".into()));
+    h.run_steps(2);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(4);
+    assert_eq!(field(h.state(), "tfn").value, ["123456782"]);
+    assert_eq!(log(&h), "up;", "the script ran once");
 }
