@@ -43,6 +43,7 @@ mod globals;
 mod host;
 mod model;
 mod nesting;
+mod regexp;
 mod run;
 mod source;
 

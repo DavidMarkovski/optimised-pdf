@@ -2775,3 +2775,80 @@ fn set_items_and_set_action_change_the_field() {
         assert!(out.error.as_deref().is_some_and(|e| e.contains(expected)), "{script}: {out:?}");
     }
 }
+
+/// A Format script in the style of government forms: test the entry, then build the shown text
+/// from `RegExp.$1`… (a TFN written 999 999 999). Without the legacy statics it showed
+/// "undefined undefined undefined".
+#[test]
+fn format_scripts_read_the_legacy_regexp_statics() {
+    let script = r#"
+        var tfn = /^(\d{3})(\d{3})(\d{3})$/;
+        if (tfn.test(event.value)) { event.value = RegExp.$1 + " " + RegExp.$2 + " " + RegExp.$3; }
+    "#;
+    let out = go(script, &Event::field("Format", "zip", "123456782"));
+    assert_eq!(out.error, None);
+    assert_eq!(out.value, "123 456 782");
+
+    // A phone number kept as one group; the statics before any match are empty.
+    let out = go(
+        "var before = RegExp.$1; /^(\\d{10})$/.test(event.value); event.value = '[' + before + ']' + RegExp.$1;",
+        &Event::field("Format", "zip", "0398765432"),
+    );
+    assert_eq!((out.error, out.value.as_str()), (None, "[]0398765432"));
+
+    // Every matching built-in records, with the aliases, the contexts and the last group.
+    let script = r#"
+        var r = [];
+        "ab-12-cd".match(/(\d)(\d)/);
+        r.push(RegExp.$1, RegExp.$2, RegExp.$3, RegExp.lastMatch, RegExp["$&"], RegExp.lastParen,
+               RegExp.leftContext, RegExp.rightContext, RegExp.input, RegExp.$_);
+        "x=7".replace(/=(\d)/, "");
+        r.push(RegExp.$1);
+        /(a)|(b)/.exec("b");
+        r.push("[" + RegExp.$1 + "]", RegExp.$2, "[" + RegExp.lastParen + "]");
+        // A failed match leaves them as they were.
+        /zzz/.test("b");
+        r.push(RegExp.$2);
+        r.join(",");
+    "#;
+    let out = go(script, &Event::field("Format", "zip", ""));
+    assert_eq!(out.error, None);
+    assert_eq!(out.result.as_deref(), Some("1,2,,12,12,2,ab-,-cd,ab-12-cd,ab-12-cd,7,[],b,[b],b"));
+}
+
+/// `AFExactMatch(patterns, text)`, as the ATO forms' Keystroke scripts call it: the 1-based
+/// number of the first pattern matching all of the text, 0 when none does.
+#[test]
+fn af_exact_match_numbers_the_pattern_matching_the_whole_entry() {
+    for (call, expected) in [
+        (r#"AFExactMatch([/^\d{3} \d{3} \d{3}$/, /^\d{9}$/,], "123456782")"#, "2"),
+        (r#"AFExactMatch([/^\d{3} \d{3} \d{3}$/, /^\d{9}$/], "123 456 782")"#, "1"),
+        (r#"AFExactMatch([/^\d{3} \d{3} \d{3}$/, /^\d{9}$/], "12345")"#, "0"),
+        // Unanchored patterns count only when they match all of it.
+        (r#"AFExactMatch([/\d{3}/, /\d+/], "12345")"#, "2"),
+        (r#"AFExactMatch(/\d+/, "12345")"#, "1"),
+        (r#"AFExactMatch(/\d+/, "12a")"#, "0"),
+        (r#"AFExactMatch(["x", 3, /x/], "x")"#, "3"),
+        (r#"AFExactMatch(null, "x")"#, "0"),
+        (r#"AFExactMatch([], "x")"#, "0"),
+    ] {
+        let out = go(call, &Event::field("Keystroke", "zip", ""));
+        assert_eq!((out.error.as_deref(), out.result.as_deref()), (None, Some(expected)), "{call}");
+    }
+
+    // The ATO TFN check, end to end: a document-level helper and the field's commit Keystroke.
+    let doc_script = r#"function checkFormatTFN(s) {
+        if (!s) return true;
+        var aTFN = [/^\d{3} \d{3} \d{3}$/, /^\d{3} \d{3} \d{2}$/, /^\d{3}\d{3}\d{3}$/, /^\d{3}\d{3}\d{2}$/,];
+        return AFExactMatch(aTFN, s);
+    }"#
+    .to_string();
+    let keystroke =
+        "if (event.willCommit && !checkFormatTFN(event.value)) { app.alert('TFN must be eight or nine digits in length.'); event.rc = false; }";
+    for (value, accepted) in [("123456782", true), ("123 456 78", true), ("", true), ("1234", false), ("12345678x", false)] {
+        let mut e = Event::field("Keystroke", "zip", value);
+        e.will_commit = true;
+        let out = run(keystroke, &e, &doc(), &fields(), std::slice::from_ref(&doc_script), Limits::default());
+        assert_eq!((out.error.as_deref(), out.rc), (None, accepted), "{value:?}");
+    }
+}

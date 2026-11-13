@@ -592,6 +592,7 @@ pub(crate) fn install(ctx: &mut Context) -> JsResult<()> {
     let color = color_object(ctx);
     ctx.register_global_property(js_string!("color"), color, rw)?;
     crate::source::install(ctx)?;
+    crate::regexp::install(ctx)?;
     Ok(())
 }
 
