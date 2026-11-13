@@ -462,7 +462,8 @@ fn winit_carries_the_windows_11_monitor_scale_fix() {
     let provenance = std::fs::read_to_string(root.join("vendor/winit/.cargo_vcs_info.json")).unwrap();
     assert!(provenance.contains("e9809ef54b18499bb4f2cac945719ecc2a61061b"), "vendor/winit keeps its upstream base provenance");
     // The copy the app actually builds (vendor/git/winit) carries the same fix in storytold's form.
-    let built = std::fs::read_to_string(root.join("vendor/git/winit/src/platform_impl/windows/event_loop.rs")).unwrap();
+    // The vendored copy keeps the line endings it was copied with (CRLF), byte for byte.
+    let built = std::fs::read_to_string(root.join("vendor/git/winit/src/platform_impl/windows/event_loop.rs")).unwrap().replace("\r\n", "\n");
     assert!(
         built.contains("let new_outer_rect: RECT = if !WIN10_BUILD_VERSION.is_some_and(|build| build < 22000) {\n                suggested_rect\n"),
         "vendor/git/winit lost the Windows 11 monitor-scale fix"
