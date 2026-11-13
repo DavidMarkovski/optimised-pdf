@@ -2178,10 +2178,9 @@ kind = "data"
 usage = "Decodes every PRC Double (coordinates, transforms, colours) in 3D annotations' PRC streams. Non-visual data."
 sha256 = "8e705c5cde6a3ef778e8aca69759e38845b228b3f7f12949e587b19855d2114c"
 
-[[bundled]]
-crate = "epaint_default_fonts"
-version = "0.37.0"
-path = "fonts/Ubuntu-Light.ttf"
+[[asset]]
+path = "vendor/git/epaint_default_fonts/fonts/Ubuntu-Light.ttf"
+licence_file = "vendor/git/epaint_default_fonts/fonts/UFL.txt"
 title = "Ubuntu Light"
 author = "Canonical Ltd. / Dalton Maag"
 source = "https://design.ubuntu.com/font"
@@ -2190,10 +2189,9 @@ kind = "font"
 usage = "egui fallback fonts (eframe feature default_fonts)"
 sha256 = "80307b8da7649aa4ee4d484b232140e3ce1ec0ca093073d3c53c8f5a5ced7a70"
 
-[[bundled]]
-crate = "epaint_default_fonts"
-version = "0.37.0"
-path = "fonts/Hack-Regular.ttf"
+[[asset]]
+path = "vendor/git/epaint_default_fonts/fonts/Hack-Regular.ttf"
+licence_file = "vendor/git/epaint_default_fonts/fonts/Hack-Regular.txt"
 title = "Hack Regular"
 author = "Source Foundry Authors (derived from Bitstream Vera / DejaVu)"
 source = "https://github.com/source-foundry/Hack"
@@ -2202,10 +2200,9 @@ kind = "font"
 usage = "egui fallback fonts (eframe feature default_fonts)"
 sha256 = "15f55cc0c85a2988d2b4b3a8cdb5d77fdfbaf319e1bb5309d725db9818fb7125"
 
-[[bundled]]
-crate = "epaint_default_fonts"
-version = "0.37.0"
-path = "fonts/NotoEmoji-Regular.ttf"
+[[asset]]
+path = "vendor/git/epaint_default_fonts/fonts/NotoEmoji-Regular.ttf"
+licence_file = "vendor/git/epaint_default_fonts/fonts/OFL.txt"
 title = "Noto Emoji (monochrome)"
 author = "Google Inc."
 source = "https://github.com/googlefonts/noto-emoji"
@@ -2214,10 +2211,9 @@ kind = "font"
 usage = "egui monochrome fallback font (egui feature monochrome_emoji_fonts)"
 sha256 = "415dc6290378574135b64c808dc640c1df7531973290c4970c51fdeb849cb0c5"
 
-[[bundled]]
-crate = "epaint_default_fonts"
-version = "0.37.0"
-path = "fonts/emoji-icon-font.ttf"
+[[asset]]
+path = "vendor/git/epaint_default_fonts/fonts/emoji-icon-font.ttf"
+licence_file = "vendor/git/epaint_default_fonts/fonts/emoji-icon-font-mit-license.txt"
 title = "emoji-icon-font"
 author = "John Slegers"
 source = "https://github.com/jslegers/emoji-icon-font"
@@ -2226,10 +2222,9 @@ kind = "font"
 usage = "egui monochrome fallback font (egui feature monochrome_emoji_fonts)"
 sha256 = "f426bec371f484646d002717e2c555a95cd5145e635d83a48bbef83f3abf18ca"
 
-[[bundled]]
-crate = "epaint_default_fonts"
-version = "0.37.0"
-path = "fonts/egui-icons.ttf"
+[[asset]]
+path = "vendor/git/epaint_default_fonts/fonts/egui-icons.ttf"
+licence_file = "vendor/git/epaint_default_fonts/fonts/emoji-icon-font-mit-license.txt"
 title = "egui icons (monochrome emoji-icon-font subset)"
 author = "John Slegers"
 source = "https://github.com/jslegers/emoji-icon-font"
@@ -3156,3 +3151,14 @@ licence_file = "assets/icons/LICENSE-lucide.txt"
 kind = "icon"
 usage = "UI icon, embedded via crates/ui-egui/src/icon_data.rs"
 sha256 = "864ab2f19254e6ac7240bc6a98323197332e8f714d4d3f94831f41309e5ef2f7"
+
+[[asset]]
+path = "vendor/git/eframe/data/icon.png"
+title = "egui logo (eframe's default window icon)"
+author = "Emil Ernerfeldt and the egui contributors"
+source = "https://github.com/storytold/egui/tree/725a39fca940f77149ffbb9c58eef405a16997bc/crates/eframe/data (vendored in vendor/git/eframe)"
+licence = "MIT OR Apache-2.0"
+licence_file = "vendor/git/eframe/LICENSE-MIT"
+kind = "image"
+usage = "Compiled into eframe as the fallback window icon; Optimised PDF sets its own icon, so it is not shown"
+sha256 = "9e076c34e32a0b0ef35c62ebf6be8b5594a4601e7bcd478b681e9eff1f327973"
