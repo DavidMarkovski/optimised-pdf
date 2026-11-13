@@ -14225,7 +14225,10 @@ fn reset_draws_the_formatted_default() {
 /// VM limits reject earlier writes in the same script and clear its uncommitted globals.
 #[test]
 fn vm_limit_refuses_partial_script_writes() {
-    let (mut s, id) = reset_order_session("");
+    let (s, id) = reset_order_session("");
+    // A fixed clock: each save stamps /ModDate, and a second ticking over between the two saves
+    // compared below would change the bytes.
+    let mut s = s.with_clock(|| 1_700_000_000);
     s.set_javascript(true);
     let before = s.save_bytes(id).unwrap();
     let script = "var rejected = 42; getField('price').value = 1; function recurse(){ return recurse(); } recurse();";
@@ -14255,7 +14258,10 @@ fn preflight_refusal_preserves_committed_callback_state() {
 /// Validation can reject an edit without hitting a runtime limit.
 #[test]
 fn validation_rejection_discards_callback_side_effects() {
-    let (mut s, id) = reset_order_session("");
+    let (s, id) = reset_order_session("");
+    // A fixed clock: each save stamps /ModDate, and a second ticking over between the two saves
+    // compared below would change the bytes.
+    let mut s = s.with_clock(|| 1_700_000_000);
     let script = "var rejectedValue = event.value; event.rc = false;";
     s.apply(id, Edit::SetFieldScript { name: "qty".into(), event: "validate".into(), script: Some(script.into()) }).unwrap();
     s.set_javascript(true);
