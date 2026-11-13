@@ -553,8 +553,10 @@ pub(crate) fn page_input(
             Some(a) => view.forms.button = Some((f.name.clone(), pdfcraft_engine::js::field_object_id(f.obj), a.clone())),
             None => view.forms.notice = Some(FormNotice::NoAction(f.name.clone())),
         },
-        FormFieldKind::Text if let Some(script) = &w.mouse_up_script => {
-            // Close the editor so the script can replace its value without a stale draft.
+        FormFieldKind::Text if let Some(script) = w.mouse_up_script.as_ref().filter(|s| may_ask(s)) => {
+            // A script that may ask the user something (a menu, a question) runs as a button's
+            // does, where it can wait for the answer. Close the editor so the script can replace
+            // its value without a stale draft.
             commit(view, form);
             view.forms.button = Some((
                 f.name.clone(),
@@ -640,7 +642,22 @@ pub(crate) fn page_input(
             view.forms.triggers.push((widget_ref(f, wi), pdfcraft_engine::FieldTrigger::MouseUp));
         }
     }
+    // Any other Mouse Up script of a text field runs with its editor open, as in Acrobat: the ATO
+    // forms' TFN and ABN boxes recolour themselves on every click, and closing the editor for
+    // that undid the press that had just opened it, so the box took several quick clicks to
+    // type into. The trigger keeps the draft, taking a value the script sets when nothing was
+    // typed yet ([`refresh_draft`]).
+    if f.kind == FormFieldKind::Text && !(f.read_only() || w.read_only) && w.mouse_up_script.as_deref().is_some_and(|s| !may_ask(s)) {
+        view.forms.triggers.push((widget_ref(f, wi), pdfcraft_engine::FieldTrigger::MouseUp));
+    }
     true
+}
+
+/// Whether a field script may stop to ask the user something: a message whose buttons it reads
+/// (`app.alert`), a question (`app.response`) or a menu (`app.popUpMenuEx`). Such a script runs
+/// where it can wait for the answer; the field triggers run at once, without one.
+fn may_ask(script: &str) -> bool {
+    ["alert", "response", "popUpMenu"].iter().any(|call| script.contains(call))
 }
 
 /// The edit the focused field's draft makes, if it differs from the field's value.
